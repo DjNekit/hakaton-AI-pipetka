@@ -1,4 +1,3 @@
-# Caddy получает и продлевает сертификат Let's Encrypt для домена сам (нужны A-запись на сервер и открытые 80/443).
 {$DOMAIN:ai-pipetka.fun} {
 	encode zstd gzip
 	request_body {

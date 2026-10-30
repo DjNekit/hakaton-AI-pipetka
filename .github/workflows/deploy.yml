@@ -1,11 +1,3 @@
-# Деплой на сервер при пуше в main.
-# Секреты репозитория (Settings → Secrets and variables → Actions):
-#   SSH_HOST            адрес сервера (168.113.211.193)
-#   SSH_USER            пользователь SSH (root или пользователь с правами на docker)
-#   SSH_PRIVATE_KEY     приватный ключ деплоя; его публичная часть — в ~/.ssh/authorized_keys на сервере
-#   GIGACHAT_AUTH_KEY   ключ авторизации GigaChat API
-#   POSTGRES_PASSWORD   пароль базы на сервере
-#   DJANGO_SECRET_KEY   секрет Django (любая длинная случайная строка)
 name: deploy
 
 on:
