@@ -16,6 +16,8 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # секреты — в окружении production, доступном только ветке main (Settings → Environments)
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
