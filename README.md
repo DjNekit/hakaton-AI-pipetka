@@ -33,10 +33,11 @@ MVP для хакатона «Архитектура цифрового горо
 
 ![Сравнение фото с развёрткой: карта отличий, цвета зон, вывод](docs/screenshot-photo.png)
 
-**Языковая модель — GigaChat API** (облако Сбера, отечественная модель, понимает изображения): разбирает
-пояснительную записку, пишет заключение и описание отличий на фото. Модель — помощник, а не судья: все решения
-«соответствует / нет» принимает код по `rules.yaml`, ответы модели сверяются с исходным текстом. Если GigaChat
-недоступен или ключ не задан, всё работает на правилах.
+**Языковые модели**: основная — **Gemma 4** в LM Studio на ноутбуке разработчика (понимает текст и фото, прод
+обращается к ней через ngrok), запасная — **GigaChat API** (облако Сбера). Модель разбирает пояснительную записку,
+пишет заключение и описание отличий на фото. Модель — помощник, а не судья: все решения «соответствует / нет»
+принимает код по `rules.yaml`, ответы модели сверяются с исходным текстом. Нет ни одной модели — всё работает
+на правилах.
 
 **Отчёт**: штамп-вердикт, каждое замечание выделено на листе, колеры «заявлено / фактически» с ΔE, таблица отделки
 или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md). История проверок
@@ -72,7 +73,8 @@ docker compose down                           # остановить (данны
 
 Секреты репозитория (Settings → Secrets and variables → Actions): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`
 (публичная часть ключа — в `~/.ssh/authorized_keys` на сервере), `GIGACHAT_AUTH_KEY`, `POSTGRES_PASSWORD`,
-`DJANGO_SECRET_KEY`. Для HTTPS нужны A-запись `ai-pipetka.fun` → IP сервера и открытые порты 80 и 443.
+`DJANGO_SECRET_KEY`, для локальной модели — `LOCAL_LLM_URL`, `LOCAL_LLM_KEY` (секреты) и `LOCAL_LLM_MODEL`
+(переменная). Для HTTPS нужны A-запись `ai-pipetka.fun` → IP сервера и открытые порты 80 и 443.
 Docker на сервере ставится при первом деплое, если его нет.
 
 На сервере вручную: `cd /opt/colorpass && docker compose -f compose.prod.yml logs -f` (логи),
@@ -87,15 +89,46 @@ Docker на сервере ставится при первом деплое, е
 загрузку файлов GigaChat. Сертификат НУЦ Минцифры ставится в образ при сборке; если сборка без доступа
 к gu-st.ru — `GIGACHAT_VERIFY_SSL=0` (только для отладки). Статус модели — в правом верхнем углу интерфейса.
 
+### Gemma 4 в LM Studio через ngrok (основная модель)
+
+Порядок выбора модели при каждой проверке: Gemma в LM Studio (если задан `LOCAL_LLM_URL` и она отвечает) →
+GigaChat API → только правила. Если Gemma отвалилась посреди проверки, запрос повторяется в GigaChat. Какая модель
+работает сейчас — в правом верхнем углу: «Локальная модель: …» или «GigaChat: …».
+
+**Локально** (`compose.yml`) достаточно запустить сервер LM Studio на этом же компьютере (порт 1234) — backend найдёт
+его сам по `http://host.docker.internal:1234/v1`.
+
+**Для прода** модель запускает один человек на своём ноутбуке, остальные пользуются ею через сайт.
+
+1. LM Studio 0.4 или новее → скачать **Gemma 4 12B** (Q4, ~8 ГБ; для Mac с 24 ГБ — оптимально; есть память —
+   26B A4B). Developer → Start Server (порт 1234).
+2. Там же Server Settings → **Require Authentication** → Manage Tokens → Create Token. Без токена модель, открытая
+   через ngrok, доступна всему интернету.
+3. ngrok: зарегистрироваться на ngrok.com, `ngrok config add-authtoken <токен ngrok>`, в Dashboard → Domains взять
+   бесплатный постоянный домен и держать открытым:
+   ```bash
+   ngrok http 1234 --url=https://<домен>.ngrok-free.app
+   ```
+4. Проверка с любого компьютера:
+   ```bash
+   curl -H "Authorization: Bearer <токен LM Studio>" https://<домен>.ngrok-free.app/v1/models
+   ```
+5. В GitHub, окружение `production`: секреты `LOCAL_LLM_URL=https://<домен>.ngrok-free.app/v1`,
+   `LOCAL_LLM_KEY=<токен LM Studio>`, переменная `LOCAL_LLM_MODEL=<идентификатор Gemma из LM Studio>`
+   (например `google/gemma-4-12b`) → перезапустить деплой (Actions → deploy → Run workflow).
+
+Закрыли ngrok или LM Studio, уснул ноутбук — следующая проверка на проде пойдёт в GigaChat, перезапуск не нужен.
+Домен постоянный, поэтому секреты меняются только при смене токена.
+
 ### Команды внутри контейнера
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real`; `--llm` — с GigaChat |
+| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real`; `--llm` — с моделью |
 | `docker compose exec backend python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
 | `docker compose exec backend python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
 | `docker compose exec backend python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
-| `docker compose exec backend python -m colorpass llm-status` | доступен ли GigaChat API |
+| `docker compose exec backend python -m colorpass llm-status` | какая модель отвечает: Gemma в LM Studio или GigaChat API |
 | `docker compose exec db psql -U colorpass -c "select file, verdict, errors from checks"` | история проверок в базе |
 
 ## Качество
@@ -124,7 +157,7 @@ PDF ──► ingest ──► вид документа ──► extract / sig
         векторы,                       экспликация вывесок                                           │   (история)
         рендер                                                                                       └─► runs/ (файлы)
 фото ──► photo: развёртка/фотомонтаж ↔ фото, углы фасада, ΔE00 по зонам, карта отличий, вердикт
-GigaChat API: разбор записки, текст заключения, описание отличий на фото
+Gemma 4 (LM Studio через ngrok), запасная — GigaChat API: разбор записки, заключение, описание отличий на фото
 ```
 
 ```
@@ -139,7 +172,7 @@ backend/
     graphics.py         цвет по выноскам, образцы, палитра развёртки, остекление
     photo.py            развёртки и фото на листах, углы фасада, выравнивание, сравнение, карта отличий
     textmatch.py        разбор записки правилами (резерв модели)
-    llm.py, llm_tasks.py  клиент GigaChat API, промпты, валидация ответов
+    llm.py, llm_tasks.py  клиенты LM Studio и GigaChat API, выбор модели, промпты, валидация ответов
     checks.py           22 проверки паспорта
     pipeline.py         полный цикл, отчёт, изображения
     store.py            история в PostgreSQL (DATABASE_URL); без базы — файлы

@@ -31,6 +31,11 @@ services:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "0"
       DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → backend
+      # основная модель — Gemma 4 в LM Studio на ноутбуке, открыта через ngrok (README → «Модели»);
+      # ноутбук выключен или туннель закрыт — GigaChat API
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
+      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
       LLM_TIMEOUT: "300"
       COLORPASS_WORKERS: "2"
       COLORPASS_MAX_UPLOAD_MB: "100"

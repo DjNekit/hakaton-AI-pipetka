@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     ep = sub.add_parser("eval-photos", help="точность сравнения фото с развёрткой по разметке *.photos.json")
     ep.add_argument("dataset", nargs="?", default=str(ROOT / "dataset" / "real"))
 
-    sub.add_parser("llm-status", help="проверить доступность GigaChat API")
+    sub.add_parser("llm-status", help="какая модель отвечает: Gemma в LM Studio или GigaChat API")
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
