@@ -122,7 +122,7 @@ export default function Report({ run, useLlm, onUpdate }) {
             <dt>Проверка</dt>
             <dd>
               {report.duration_s} с, {s.pages} {plural(s.pages, "лист", "листа", "листов")}
-              {report.llm.used ? `, ${report.llm.model}` : ", без GigaChat"}
+              {report.llm.used ? `, ${report.llm.model}` : ", без модели"}
             </dd>
           </div>
         </dl>

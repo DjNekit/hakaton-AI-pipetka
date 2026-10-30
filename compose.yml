@@ -8,7 +8,7 @@ services:
     image: colorpass-dev-backend:test    # используем готовый образ
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]   # автоперезагрузка при изменении кода
     environment:
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}      # GigaChat API — единственная модель; без ключа — проверка по правилам
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}      # GigaChat API — запасная модель; без ключа — проверка по правилам
       GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
       GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
       GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
@@ -18,6 +18,11 @@ services:
       COLORPASS_MAX_UPLOAD_MB: "100"
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
+      # основная модель — Gemma 4 в LM Studio на этом компьютере (или чужая через ngrok); не отвечает — GigaChat API
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
+      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./backend:/app/backend    # код — с диска
       - ./runs:/app/runs          # отчёты проверок

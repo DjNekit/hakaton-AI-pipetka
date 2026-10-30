@@ -60,7 +60,7 @@ export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
                   <span className="run-file">{r.file}</span>
                   <span className="run-meta">
                     {r.state === "done" ? VERDICT[r.verdict]?.short : r.state === "error" ? "ошибка" : "идёт проверка"}
-                    {r.state === "done" && r.llm_used ? ", с GigaChat" : ""}
+                    {r.state === "done" && r.llm_used ? ", с моделью" : ""}
                     <time>{formatTime(r.created_at)}</time>
                   </span>
                 </button>

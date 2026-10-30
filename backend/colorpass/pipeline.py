@@ -106,8 +106,9 @@ def run_check(
             llm_info["status"] = st
             if st.get("available"):
                 llm_info["model"] = st.get("model")
+                llm_info["provider"] = st.get("provider", "gigachat")
                 if passport.note_text and passport.finish_rows:
-                    progress("GigaChat: разбор пояснительной записки", 0.3)
+                    progress("Модель: разбор пояснительной записки", 0.3)
                     try:
                         mentions = llm_mentions(client, passport.note_text, passport.finish_rows)
                         llm_info["tasks"]["note_mentions"] = "ok"
@@ -189,7 +190,7 @@ def run_check(
 
         conclusion = {"text": template_conclusion(summary, findings), "source": "template"}
         if client is not None and llm_info.get("model"):
-            progress("GigaChat: формулировка заключения", 0.85)
+            progress("Модель: формулировка заключения", 0.85)
             try:
                 conclusion = {"text": llm_conclusion(client, summary, findings), "source": "llm", "template": conclusion["text"]}
                 llm_info["tasks"]["conclusion"] = "ok"
@@ -346,7 +347,8 @@ def _run_signage(doc, pdf_path, out: Path, rules: dict, use_llm: bool, llm, prog
         llm_info["status"] = st
         if st.get("available"):
             llm_info["model"] = st.get("model")
-            progress("GigaChat: формулировка заключения", 0.85)
+            llm_info["provider"] = st.get("provider", "gigachat")
+            progress("Модель: формулировка заключения", 0.85)
             try:
                 conclusion = {"text": llm_conclusion(client, summary, findings), "source": "llm", "template": conclusion["text"]}
                 llm_info["tasks"]["conclusion"] = "ok"

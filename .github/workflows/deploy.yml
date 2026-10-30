@@ -50,6 +50,9 @@ jobs:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          LOCAL_LLM_URL: ${{ secrets.LOCAL_LLM_URL }}
+          LOCAL_LLM_KEY: ${{ secrets.LOCAL_LLM_KEY }}
+          LOCAL_LLM_MODEL: ${{ vars.LOCAL_LLM_MODEL }}
         run: |
           {
             echo "DOMAIN=$DOMAIN"
@@ -58,6 +61,9 @@ jobs:
             echo "GIGACHAT_MODEL=GigaChat-2-Max"
             echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
             echo "DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY"
+            echo "LOCAL_LLM_URL=$LOCAL_LLM_URL"
+            echo "LOCAL_LLM_KEY=$LOCAL_LLM_KEY"
+            echo "LOCAL_LLM_MODEL=$LOCAL_LLM_MODEL"
           } | ssh prod "umask 077 && cat > $APP_DIR/.env"
 
       - name: Сборка и запуск
