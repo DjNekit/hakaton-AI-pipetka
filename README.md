@@ -67,8 +67,7 @@ docker compose down                           # остановить (данны
 
 ### Прод: https://ai-pipetka.fun
 
-Деплой автоматический: пуш в `main` → GitHub Actions (`.github/workflows/deploy.yml`) прогоняет тесты и сборку
-фронтенда, копирует код на сервер (`/opt/colorpass`), пишет там `.env` из секретов репозитория и выполняет
+Деплой автоматический: пуш в `main` → GitHub Actions (`.github/workflows/deploy.yml`) копирует код на сервер (`/opt/colorpass`), пишет там `.env` из секретов репозитория и выполняет
 `docker compose -f compose.prod.yml up -d --build`. Caddy сам получает и продлевает сертификат Let's Encrypt.
 
 Секреты репозитория (Settings → Secrets and variables → Actions): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`
@@ -92,7 +91,6 @@ Docker на сервере ставится при первом деплое, е
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec backend python -m unittest discover -s tests` | тесты |
 | `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real`; `--llm` — с GigaChat |
 | `docker compose exec backend python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
 | `docker compose exec backend python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
@@ -150,7 +148,6 @@ backend/
     data/rules.yaml     формализованные требования и пороги
   api/, config/         Django 4.2: /api/*
   devserver.py          тот же API без Django
-  tests/                тесты
 frontend/               React 18 + Vite
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```

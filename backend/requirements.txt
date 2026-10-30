@@ -11,7 +11,5 @@ Django>=4.2,<5.0
 psycopg[binary]>=3.1
 # Продовый сервер (compose.prod.yml)
 gunicorn>=22.0
-# Тесты (можно и без него: python -m unittest)
-pytest>=8.0
 # OCR сканов: tesseract с русским языком установлен в Docker-образе; без него коды берутся из OCR-слоя PDF
 pytesseract>=0.3.10
