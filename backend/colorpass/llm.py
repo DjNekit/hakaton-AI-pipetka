@@ -294,7 +294,7 @@ class LocalClient:
             raise LLMError(f"Локальная модель: ответ не JSON ({url}) — туннель ngrok закрыт или адрес неверный") from exc
         except urllib.error.HTTPError as exc:
             raise LLMError(f"Локальная модель: HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
-        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+        except Exception as exc:  # noqa: BLE001 — любой сбой сети или адреса: переходим на GigaChat
             raise LLMError(f"Локальная модель недоступна ({url}): {exc}") from exc
 
     def status(self) -> dict:
@@ -397,10 +397,25 @@ class RoutedClient:
         return self._run("chat_json", *args, **kwargs)
 
 
+def normalize_local_url(raw: str) -> str:
+    """Прощает типичные ошибки в адресе: «LOCAL_LLM_URL=…» в значении, нет схемы, нет /v1, кавычки."""
+    url = raw.strip().strip("'\"")
+    while url.upper().startswith("LOCAL_LLM_URL="):
+        url = url.split("=", 1)[1].strip().strip("'\"")
+    if not url:
+        return ""
+    if "://" not in url:
+        url = ("http://" if url.startswith(("localhost", "127.", "host.docker.internal")) else "https://") + url
+    url = url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
+    return url
+
+
 def make_client(config: LLMConfig | None = None):
     """При заданном LOCAL_LLM_URL — сначала локальная модель (Gemma 4 в LM Studio), GigaChat — запасной; иначе GigaChat."""
     cloud = LLMClient(config)
-    local_url = os.getenv("LOCAL_LLM_URL", "").strip()
+    local_url = normalize_local_url(os.getenv("LOCAL_LLM_URL", ""))
     if not local_url:
         return cloud
     local = LocalClient(local_url, os.getenv("LOCAL_LLM_MODEL", "").strip(), float(os.getenv("LOCAL_LLM_TIMEOUT", "300")),
