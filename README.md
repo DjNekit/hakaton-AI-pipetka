@@ -102,8 +102,8 @@ GigaChat API → только правила. Если Gemma отвалилас�
 
 1. LM Studio 0.4 или новее → скачать **Gemma 4 12B** (Q4, ~8 ГБ; для Mac с 24 ГБ — оптимально; есть память —
    26B A4B). Developer → Start Server (порт 1234).
-2. Там же Server Settings → **Require Authentication** → Manage Tokens → Create Token. Без токена модель, открытая
-   через ngrok, доступна всему интернету.
+2. Токен LM Studio не обязателен. Без него любой, кто узнает адрес ngrok, сможет пользоваться моделью; если нужно
+   закрыть — Server Settings → Require Authentication → Create Token и секрет `LOCAL_LLM_KEY`.
 3. ngrok: зарегистрироваться на ngrok.com, `ngrok config add-authtoken <токен ngrok>`, в Dashboard → Domains взять
    бесплатный постоянный домен и держать открытым:
    ```bash
@@ -111,14 +111,13 @@ GigaChat API → только правила. Если Gemma отвалилас�
    ```
 4. Проверка с любого компьютера:
    ```bash
-   curl -H "Authorization: Bearer <токен LM Studio>" https://<домен>.ngrok-free.app/v1/models
+   curl https://<домен>.ngrok-free.app/v1/models
    ```
-5. В GitHub, окружение `production`: секреты `LOCAL_LLM_URL=https://<домен>.ngrok-free.app/v1`,
-   `LOCAL_LLM_KEY=<токен LM Studio>`, переменная `LOCAL_LLM_MODEL=<идентификатор Gemma из LM Studio>`
+5. В GitHub, окружение `production`: секрет `LOCAL_LLM_URL=https://<домен>.ngrok-free.app/v1`, переменная `LOCAL_LLM_MODEL=<идентификатор Gemma из LM Studio>`
    (например `google/gemma-4-12b`) → перезапустить деплой (Actions → deploy → Run workflow).
 
 Закрыли ngrok или LM Studio, уснул ноутбук — следующая проверка на проде пойдёт в GigaChat, перезапуск не нужен.
-Домен постоянный, поэтому секреты меняются только при смене токена.
+Домен постоянный, поэтому секрет задаётся один раз.
 
 ### Команды внутри контейнера
 
