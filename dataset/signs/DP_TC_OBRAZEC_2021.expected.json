@@ -1,0 +1,49 @@
+{
+  "sample": "DP_TC_OBRAZEC_2021",
+  "file": "DP_TC_OBRAZEC_2021.pdf",
+  "kind": "signage",
+  "label": "Образец дизайн-проекта вывесок ТЦ (mos.ru)",
+  "clean": false,
+  "source": "https://www.mos.ru/upload/content/files/DP_TC_OBRAZEC_2021.pdf",
+  "note": "Официальный образец Москомархитектуры (mos.ru): шаблон, поля не заполнены. Разметка — ручная, по листам PDF.",
+  "defects": [
+    {
+      "rule": "SGN-02",
+      "detail": "Пояснительная записка — только перечень требований образца"
+    },
+    {
+      "rule": "SGN-04",
+      "detail": "В экспликации вместо размеров «Д х В х Ш»"
+    },
+    {
+      "rule": "SGN-08",
+      "severity": "warning",
+      "detail": "На листе фотофиксации нет даты съёмки (есть только дата договора)"
+    },
+    {
+      "rule": "SGN-11",
+      "severity": "warning",
+      "page": 4,
+      "detail": "Фото на листе 4 — меньше 300 dpi при печати"
+    },
+    {
+      "rule": "SGN-11",
+      "severity": "warning",
+      "page": 7,
+      "detail": "Фото на листе 7 — меньше 300 dpi при печати"
+    },
+    {
+      "rule": "SGN-11",
+      "severity": "warning",
+      "page": 8,
+      "detail": "Фото на листе 8 — меньше 300 dpi при печати"
+    },
+    {
+      "rule": "SGN-11",
+      "severity": "warning",
+      "page": 10,
+      "detail": "Фото на листе 10 — меньше 300 dpi при печати"
+    }
+  ],
+  "reference_conclusion": "Дизайн-проект требует доработки: заполнить пояснительную записку, указать масштаб и габариты вывесок, дату фотофиксации."
+}

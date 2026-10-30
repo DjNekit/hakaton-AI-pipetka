@@ -1,0 +1,73 @@
+# Прод: образы собираются на сервере, наружу смотрит только Caddy (80/443, сертификат Let's Encrypt).
+#   docker compose -f compose.prod.yml up -d --build
+# Разворачивается автоматически при пуше в main (.github/workflows/deploy.yml); .env на сервере пишет CI.
+name: colorpass
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-ai-pipetka.fun}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # сертификаты — переживают перезапуск и пересборку
+      - caddy-config:/config
+    depends_on:
+      - frontend
+
+  frontend:
+    build: ./frontend               # nginx: собранный React + прокси /api → backend
+    restart: always
+    depends_on:
+      backend: { condition: service_healthy }
+
+  backend:
+    build: ./backend                # gunicorn
+    restart: always
+    environment:
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
+      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
+      DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@db:5432/colorpass
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → nginx → backend
+      LLM_TIMEOUT: "300"
+      COLORPASS_WORKERS: "2"
+      COLORPASS_MAX_UPLOAD_MB: "100"
+    volumes:
+      - ./runs:/app/runs
+      - ./dataset:/app/dataset
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/rules', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
+
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: colorpass
+      POSTGRES_USER: colorpass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+    volumes: ["pgdata:/var/lib/postgresql/data"]   # наружу порт не открыт
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colorpass -d colorpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

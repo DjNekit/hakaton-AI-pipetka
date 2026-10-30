@@ -1,0 +1,74 @@
+import { useRef, useState } from "react";
+import { VERDICT, formatTime } from "../format.js";
+
+export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
+  const inputRef = useRef(null);
+  const [drag, setDrag] = useState(false);
+
+  const pick = (files) => {
+    const f = files && files[0];
+    if (f) onUpload(f);
+  };
+
+  return (
+    <aside className="sidebar" aria-label="Проверки">
+      <section className="side-block">
+        <h2 className="side-title">Новая проверка</h2>
+        <div
+          className={`dropzone${drag ? " is-drag" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDrag(true);
+          }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDrag(false);
+            pick(e.dataTransfer.files);
+          }}
+        >
+          <p>Перетащите сюда PDF паспорта или дизайн-проекта вывесок</p>
+          <button type="button" className="btn btn-primary" onClick={() => inputRef.current && inputRef.current.click()}>
+            Выбрать файл
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            hidden
+            onChange={(e) => {
+              pick(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </section>
+
+      {runs.length > 0 && (
+        <section className="side-block">
+          <h2 className="side-title">Журнал проверок</h2>
+          <ul className="run-list">
+            {runs.slice(0, 30).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  className={`run${r.id === currentId ? " is-current" : ""}`}
+                  onClick={() => onOpen(r.id)}
+                  aria-current={r.id === currentId ? "page" : undefined}
+                >
+                  <span className={`run-mark tone-${r.state === "done" ? VERDICT[r.verdict]?.tone : r.state === "error" ? "error" : "muted"}`} aria-hidden="true" />
+                  <span className="run-file">{r.file}</span>
+                  <span className="run-meta">
+                    {r.state === "done" ? VERDICT[r.verdict]?.short : r.state === "error" ? "ошибка" : "идёт проверка"}
+                    {r.state === "done" && r.llm_used ? ", с GigaChat" : ""}
+                    <time>{formatTime(r.created_at)}</time>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </aside>
+  );
+}
