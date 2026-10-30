@@ -4,8 +4,8 @@
 name: colorpass
 
 services:
-  caddy:
-    image: caddy:2.8-alpine
+  web:
+    build: ./frontend               # Caddy: собранный React, HTTPS (Let's Encrypt), прокси /api → backend
     restart: always
     ports:
       - "80:80"
@@ -14,15 +14,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-ai-pipetka.fun}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data          # сертификаты — переживают перезапуск и пересборку
       - caddy-config:/config
-    depends_on:
-      - frontend
-
-  frontend:
-    build: ./frontend               # nginx: собранный React + прокси /api → backend
-    restart: always
     depends_on:
       backend: { condition: service_healthy }
 
@@ -37,10 +30,14 @@ services:
       DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@db:5432/colorpass
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "0"
-      DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → nginx → backend
+      DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → backend
+      # локальная модель разработчика через обратный SSH-туннель (README → «Локальная модель»); нет туннеля — GigaChat
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:11234/v1}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
       LLM_TIMEOUT: "300"
       COLORPASS_WORKERS: "2"
       COLORPASS_MAX_UPLOAD_MB: "100"
+    extra_hosts: ["host.docker.internal:host-gateway"]   # адрес сервера из контейнера — туда приходит туннель
     volumes:
       - ./runs:/app/runs
       - ./dataset:/app/dataset

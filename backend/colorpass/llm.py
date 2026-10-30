@@ -1,4 +1,4 @@
-"""Клиент GigaChat API (Сбер) — единственная языковая модель сервиса.
+"""Клиент GigaChat API (Сбер) — основная языковая модель сервиса; для разработки — локальная модель (LocalClient).
 
 Модель только читает текст и изображения и формулирует выводы; решения «соответствует / нет» принимает код.
 Без ключа или без доступа к API сервис работает по правилам.
@@ -257,8 +257,148 @@ class LLMClient:
 GigaChatClient = LLMClient  # прежнее имя класса
 
 
-def make_client(config: LLMConfig | None = None) -> LLMClient:
-    return LLMClient(config)
+# ---------------------------------------------------------------------------- локальная модель (для разработки)
+
+
+class LocalClient:
+    """Локальная модель за OpenAI-совместимым API (LM Studio, llama.cpp server) — например, VLM на ноутбуке
+    разработчика, до которого прод достаёт через обратный SSH-туннель. Включается переменной LOCAL_LLM_URL.
+
+      LOCAL_LLM_URL=http://host.docker.internal:11234/v1   адрес API (пусто — не используется)
+      LOCAL_LLM_MODEL=                                       пусто — первая загруженная чат-модель
+      LOCAL_LLM_TIMEOUT=300                                  секунд на ответ
+    """
+
+    provider = "local"
+
+    def __init__(self, base_url: str, model: str = "", timeout: float = 300.0):
+        self.base_url = base_url.rstrip("/")
+        self._model = model or None
+        self.timeout = timeout
+        self.calls: list[dict] = []
+
+    def _request(self, method: str, path: str, payload: dict | None = None, timeout: float | None = None) -> dict:
+        url = f"{self.base_url}{path}"
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Authorization", "Bearer local")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise LLMError(f"Локальная модель: HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')[:300]}") from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            raise LLMError(f"Локальная модель недоступна ({url}): {exc}") from exc
+
+    def status(self) -> dict:
+        base = {"enabled": True, "provider": "local", "base_url": self.base_url}
+        try:
+            data = self._request("GET", "/models", timeout=3)
+        except LLMError as exc:
+            return {**base, "available": False, "model": None, "error": str(exc)}
+        models = [m.get("id") for m in data.get("data", []) if m.get("id") and "embed" not in m.get("id", "").lower()]
+        model = self._model or (models[0] if models else None)
+        self._model = model
+        return {**base, "available": bool(model), "model": model, "models": models}
+
+    def model(self) -> str:
+        if not self._model and not self.status().get("available"):
+            raise LLMError("Локальная модель: нет загруженной модели")
+        return self._model  # type: ignore[return-value]
+
+    def chat(
+        self, system: str, user: str, schema: dict | None = None, max_tokens: int = 2000, images: list[str] | None = None
+    ) -> str:
+        content: str | list = user
+        if images:
+            content = [{"type": "text", "text": user}] + [
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}} for b64 in images
+            ]
+        payload: dict = {
+            "model": self.model(),
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "reasoning_effort": "none",  # «думающие» модели отвечают в разы быстрее
+        }
+        if schema is not None:
+            payload["response_format"] = {"type": "json_schema", "json_schema": {"name": "result", "strict": True, "schema": schema}}
+        t0 = time.time()
+        try:
+            data = self._request("POST", "/chat/completions", payload)
+        except LLMError as exc:
+            if "HTTP 400" not in str(exc):
+                raise
+            payload.pop("response_format", None)  # сервер не понимает structured output — без него
+            payload.pop("reasoning_effort", None)
+            data = self._request("POST", "/chat/completions", payload)
+        msg = (data.get("choices") or [{}])[0].get("message") or {}
+        text = re.sub(r"<think>.*?</think>", "", msg.get("content") or "", flags=re.S).strip()
+        self.calls.append({"model": payload["model"], "provider": "local", "seconds": round(time.time() - t0, 1),
+                           "usage": data.get("usage"), "json": schema is not None, "images": len(images or [])})
+        if not text:
+            raise LLMError("Локальная модель вернула пустой ответ")
+        return text
+
+    def chat_json(self, system: str, user: str, schema: dict, max_tokens: int = 2000, images: list[str] | None = None) -> dict:
+        extra = {"images": images} if images else {}
+        return parse_json(self.chat(system, user, schema=schema, max_tokens=max_tokens, **extra))
+
+
+class RoutedClient:
+    """Сначала локальная модель (если задан LOCAL_LLM_URL и она отвечает), иначе — GigaChat API.
+    Если локальная модель отвалилась посреди проверки, запрос повторяется в GigaChat."""
+
+    def __init__(self, local: LocalClient, cloud: LLMClient):
+        self.local, self.cloud = local, cloud
+        self.calls: list[dict] = []
+        self._order: list = [local, cloud]
+        self._status: dict | None = None
+
+    def status(self) -> dict:
+        ls, gs = self.local.status(), None
+        if ls.get("available"):
+            self._order = [self.local, self.cloud]
+            active = {**ls, "provider": "local"}
+        else:
+            gs = self.cloud.status()
+            self._order = [self.cloud]
+            active = {**gs, "provider": "gigachat"}
+        self._status = {**active, "local": {k: ls.get(k) for k in ("available", "model", "error", "base_url")},
+                        "gigachat": None if gs is None else {k: gs.get(k) for k in ("available", "model", "error")}}
+        return self._status
+
+    def model(self) -> str:
+        return self._order[0].model()
+
+    def _run(self, method: str, *args, **kwargs):
+        last: Exception | None = None
+        for client in self._order:
+            try:
+                return getattr(client, method)(*args, **kwargs)
+            except LLMError as exc:
+                last = exc
+                log.warning("%s не ответила, пробую следующую модель: %s", type(client).__name__, exc)
+            finally:
+                self.calls = self.local.calls + self.cloud.calls
+        raise last or LLMError("Нет доступной модели")
+
+    def chat(self, *args, **kwargs) -> str:
+        return self._run("chat", *args, **kwargs)
+
+    def chat_json(self, *args, **kwargs) -> dict:
+        return self._run("chat_json", *args, **kwargs)
+
+
+def make_client(config: LLMConfig | None = None):
+    """GigaChat API; при заданном LOCAL_LLM_URL — сначала локальная модель, GigaChat — запасной."""
+    cloud = LLMClient(config)
+    local_url = os.getenv("LOCAL_LLM_URL", "").strip()
+    if not local_url:
+        return cloud
+    local = LocalClient(local_url, os.getenv("LOCAL_LLM_MODEL", "").strip(), float(os.getenv("LOCAL_LLM_TIMEOUT", "300")))
+    return RoutedClient(local, cloud)
 
 
 def parse_json(text: str) -> dict:
