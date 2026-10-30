@@ -33,7 +33,7 @@ export default function Conclusion({ run }) {
           <a className="btn" href={api.fileUrl(run.id, "conclusion.md")} download={`заключение-${run.id}.md`}>
             Скачать .md
           </a>
-          {llm.requested && !llm.used && llm.error && <span className="muted">Модель не использована: {llm.error}</span>}
+          {llm.requested && !llm.used && llm.error && <span className="muted">GigaChat не использован: {llm.error}</span>}
         </footer>
       </section>
       {reference && (

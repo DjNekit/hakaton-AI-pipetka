@@ -132,16 +132,12 @@ function LlmStatus({ health }) {
   if (!llm.available)
     return (
       <span className="llm-status llm-off" title={llm.error || ""}>
-        Модель недоступна — проверка по правилам
+        GigaChat недоступен — проверка по правилам
       </span>
     );
-  const local = llm.provider === "local";
   return (
-    <span
-      className="llm-status llm-on"
-      title={local ? "Локальная модель разработчика через SSH-туннель; если она отключится — GigaChat API" : "GigaChat API"}
-    >
-      <span className="dot" aria-hidden="true" /> {local ? "Локальная модель" : "GigaChat"}: {llm.model}
+    <span className="llm-status llm-on" title="GigaChat API">
+      <span className="dot" aria-hidden="true" /> GigaChat: {llm.model}
     </span>
   );
 }

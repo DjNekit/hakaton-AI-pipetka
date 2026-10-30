@@ -369,7 +369,7 @@ def compare_photo(
                 review = llm_photo_review(
                     client, [png_b64(imgs["drawing"]), png_b64(imgs["photo_warped"]), png_b64(imgs["diff_overlay"])], result
                 )
-                llm_info = {"used": True, "model": st.get("model"), "provider": st.get("provider", "gigachat"), "error": None}
+                llm_info = {"used": True, "model": st.get("model"), "error": None}
             except Exception as exc:  # noqa: BLE001 — модель без зрения, таймаут и т. п.: работаем без неё
                 log.warning("Модель не описала фото: %s", exc)
                 llm_info = {"used": False, "model": st.get("model"), "error": str(exc)[:300]}

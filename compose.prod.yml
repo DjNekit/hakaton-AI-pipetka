@@ -31,13 +31,9 @@ services:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "0"
       DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → backend
-      # локальная модель разработчика через обратный SSH-туннель (README → «Локальная модель»); нет туннеля — GigaChat
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:11234/v1}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
       LLM_TIMEOUT: "300"
       COLORPASS_WORKERS: "2"
       COLORPASS_MAX_UPLOAD_MB: "100"
-    extra_hosts: ["host.docker.internal:host-gateway"]   # адрес сервера из контейнера — туда приходит туннель
     volumes:
       - ./runs:/app/runs
       - ./dataset:/app/dataset

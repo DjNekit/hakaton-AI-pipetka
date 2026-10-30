@@ -18,10 +18,6 @@ services:
       COLORPASS_MAX_UPLOAD_MB: "100"
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
-      # LM Studio на этом компьютере, если запущена; иначе — GigaChat API
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./backend:/app/backend    # код — с диска
       - ./runs:/app/runs          # отчёты проверок
