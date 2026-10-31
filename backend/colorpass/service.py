@@ -19,7 +19,7 @@ from . import __version__
 from .checks import load_rules
 from .llm import LLMClient, make_client
 from .store import get_store, safe
-from .pipeline import run_check
+from .pipeline import run_check, template_conclusion
 
 log = logging.getLogger(__name__)
 
@@ -249,6 +249,119 @@ def get_run(run_id: str) -> dict:
         if exp:
             status["expected"] = json.loads(exp.read_text(encoding="utf-8"))
     return status
+
+
+_EDIT_LOCK = threading.Lock()
+_FINDING_ACTIONS = {"dismiss", "restore", "delete"}
+
+
+def _recalc_report(report: dict) -> list[dict]:
+    """Пересчитывает вердикт, счётчики, чек-лист и заключение без исключённых замечаний."""
+    findings = report.get("findings") or []
+    for f in findings:
+        f.setdefault("dismissed", False)
+    active = [f for f in findings if not f.get("dismissed")]
+    errors = [f for f in active if f.get("severity") == "error"]
+    warns = [f for f in active if f.get("severity") == "warning"]
+    report["verdict"] = "fail" if errors else ("warn" if warns else "pass")
+
+    checklist = report.get("checklist") or []
+    for item in checklist:
+        if item.get("status") == "skip":
+            item["findings"] = []
+            continue
+        own = [f for f in active if f.get("rule") == item.get("rule")]
+        item["findings"] = [f["id"] for f in own]
+        sev = {f.get("severity") for f in own}
+        item["status"] = "fail" if "error" in sev else ("warn" if "warning" in sev else "ok")
+
+    counts = report.setdefault("counts", {})
+    counts.update(
+        errors=len(errors),
+        warnings=len(warns),
+        rules_total=len(checklist),
+        rules_ok=sum(1 for c in checklist if c.get("status") == "ok"),
+        rules_failed=sum(1 for c in checklist if c.get("status") == "fail"),
+        rules_warn=sum(1 for c in checklist if c.get("status") == "warn"),
+        rules_skipped=sum(1 for c in checklist if c.get("status") == "skip"),
+    )
+    for page in report.get("pages") or []:
+        page["findings"] = [f["id"] for f in active if f.get("page") == page.get("index")]
+    report["conclusion"] = {
+        "text": template_conclusion(report.get("summary") or {}, active),
+        "source": "template",
+        "recalculated": True,
+    }
+    return active
+
+
+def _refresh_annotations(run_dir: Path, report: dict, active: list[dict]) -> None:
+    """Перерисовывает листы с рамками только по оставленным замечаниям."""
+    pages = report.get("pages") or []
+    if not pages:
+        return
+    try:
+        from PIL import Image
+
+        from .ingest import Document
+        from .pipeline import PREVIEW_SCALE, _annotate
+
+        doc = Document(run_dir / "input.pdf")
+        try:
+            for entry in pages:
+                page_f = [f for f in active if f.get("page") == entry.get("index") and f.get("bbox")]
+                rel = entry.get("annotated")
+                if page_f:
+                    rel = rel or f"annotated/p{entry['index'] + 1:02d}.png"
+                    (run_dir / "annotated").mkdir(exist_ok=True)
+                    img = doc.render(entry["index"], PREVIEW_SCALE)
+                    Image.fromarray(_annotate(img, page_f, PREVIEW_SCALE)).save(run_dir / rel, optimize=True)
+                    entry["annotated"] = rel
+                elif rel:
+                    entry.pop("annotated", None)
+                    (run_dir / rel).unlink(missing_ok=True)
+        finally:
+            doc.close()
+    except Exception as exc:  # noqa: BLE001 — без картинок отчёт остаётся корректным
+        log.warning("Не удалось обновить изображения листов: %s", exc)
+
+
+def change_finding_status(run_id: str, finding_id: str, action: str = "dismiss", reason: str = "") -> dict:
+    """Исключает замечание как ложное срабатывание, возвращает его или удаляет из отчёта."""
+    action = (action or "").strip().lower()
+    if action not in _FINDING_ACTIONS:
+        raise BadRequest("Действие должно быть dismiss, restore или delete")
+    if not finding_id:
+        raise BadRequest("Не указано замечание")
+    with _EDIT_LOCK:
+        run_dir, report = _done_report(run_id)
+        findings = report.get("findings") or []
+        target = next((f for f in findings if f.get("id") == finding_id), None)
+        if target is None:
+            raise NotFound(finding_id)
+        if action == "delete":
+            report["findings"] = [f for f in findings if f.get("id") != finding_id]
+        else:
+            target["dismissed"] = action == "dismiss"
+            if target["dismissed"]:
+                target["dismissed_at"] = _now()
+                target["dismiss_reason"] = (reason or "").strip() or None
+            else:
+                target.pop("dismissed_at", None)
+                target.pop("dismiss_reason", None)
+        active = _recalc_report(report)
+        _refresh_annotations(run_dir, report, active)
+        (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "conclusion.md").write_text(report["conclusion"]["text"], encoding="utf-8")
+        _write_status(
+            run_id,
+            report=report,
+            verdict=report["verdict"],
+            counts=report["counts"],
+            dismissed=sum(1 for f in report["findings"] if f.get("dismissed")),
+            edited_at=_now(),
+        )
+        return get_run(run_id)
 
 
 def run_file(run_id: str, relpath: str) -> Path:

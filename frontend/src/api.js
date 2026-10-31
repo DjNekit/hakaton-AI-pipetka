@@ -48,6 +48,13 @@ export const api = {
     if (photoBlock) fd.append("photo_block", photoBlock);
     return request(`/checks/${id}/corners`, { method: "POST", body: fd });
   },
+  changeFindingStatus: (id, findingId, action, reason = "") => {
+    const fd = new FormData();
+    fd.append("finding_id", findingId);
+    fd.append("action", action);
+    if (reason) fd.append("reason", reason);
+    return request(`/checks/${id}/change_status`, { method: "POST", body: fd });
+  },
   fileUrl: (id, rel) => `${BASE}/checks/${id}/files/${rel}`,
   samplePdfUrl: (name) => `${BASE}/samples/${name}/pdf`,
 };

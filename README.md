@@ -158,6 +158,8 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 фотомонтаж и фото документа), `POST /api/checks/{id}/corners` (подсказка углов фасада: `photo` или `photo_block`),
 `POST /api/checks/{id}/comparisons` (multipart `facade`, `photo` или `photo_block`, `quad` — 4 угла `[[x, y], …]`,
 `rect` — часть развёртки в долях, `llm`), `GET /api/checks/{id}/comparisons`.
+Замечания: `POST /api/checks/{id}/change_status` (multipart `finding_id`, `action` — `dismiss`/`restore`/`delete`,
+`reason` — необязательно) исключает ложное срабатывание и пересчитывает вердикт, счётчики и заключение.
 
 ## Ограничения MVP
 

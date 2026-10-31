@@ -15,11 +15,11 @@ export default function EmptyState({ rules, samples, onSample }) {
           документа, сверит его с ПП Москвы № 114-ПП или № 902-ПП и покажет каждое расхождение на листе. Во вкладке
           «Сравнение с фото» — сравнение фото здания или скрина с камеры с развёрткой или фотомонтажом.
         </p>
-        {demo && (
+        {/* {demo && (
           <button type="button" className="btn btn-primary" onClick={() => onSample(demo.name)}>
             Проверить реальный паспорт
           </button>
-        )}
+        )} */}
       </div>
       {rules && (
         <div className="rulebook" aria-label="Что проверяется">

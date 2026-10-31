@@ -22,7 +22,11 @@ export default function Conclusion({ run }) {
         <header className="paper-head">
           <h2>Заключение</h2>
           <span className="paper-source">
-            {conclusion.source === "llm" ? `Сформулировано языковой моделью ${llm.model} по результатам проверки` : "Составлено по шаблону из результатов проверки"}
+            {conclusion.recalculated
+              ? "Пересчитано по шаблону после изменения списка замечаний"
+              : conclusion.source === "llm"
+                ? `Сформулировано языковой моделью ${llm.model} по результатам проверки`
+                : "Составлено по шаблону из результатов проверки"}
           </span>
         </header>
         <div className="paper-text">{conclusion.text}</div>

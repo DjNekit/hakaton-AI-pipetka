@@ -23,6 +23,14 @@ export default function App() {
 
   const refreshRuns = useCallback(() => api.checks().then(setRuns).catch(() => {}), []);
 
+  const updateRun = useCallback(
+    (updated) => {
+      setRun(updated);
+      refreshRuns();
+    },
+    [refreshRuns],
+  );
+
   useEffect(() => {
     api.samples().then(setSamples).catch((e) => setError(`Бэкенд недоступен: ${e.message}`));
     api.rules().then(setRules).catch(() => {});
@@ -119,7 +127,7 @@ export default function App() {
               Проверка «{run.file}» не выполнена: {run.error}. Проверьте, что файл — паспорт в формате PDF, и запустите проверку ещё раз.
             </div>
           )}
-          {currentId && run && run.state === "done" && run.report && <Report run={run} useLlm={useLlm} />}
+          {currentId && run && run.state === "done" && run.report && <Report run={run} useLlm={useLlm} onUpdate={updateRun} />}
         </main>
       </div>
     </div>
