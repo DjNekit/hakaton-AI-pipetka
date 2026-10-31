@@ -28,6 +28,8 @@ const post = async (path, body) =>
 const id = encodeURIComponent;
 
 export const backend = {
+  package: packageId => get(`/packages/${id(packageId)}`),
+  saveChecklistReview: (packageId, body) => post(`/packages/${id(packageId)}/checklist-review`, body),
   check: (checkId) => get(`/checks/${id(checkId)}`),
   comparisons: (checkId) => get(`/checks/${id(checkId)}/comparisons`),
   /** Файл документа (картинка листа, сравнения) — у сервиса checker, в base64 для модели. */

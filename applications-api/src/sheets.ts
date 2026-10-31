@@ -35,6 +35,7 @@ export async function readSheets(packageId: string, withFindings: boolean) {
     const run = await json<Run>(`${BACKEND}/api/checks/${encodeURIComponent(document.id)}`)
     return {
       index,
+      id: document.id,
       name: run.file ?? document.file ?? `Документ ${index + 1}`,
       pages: (run.report?.pages ?? []).map(({ image: _image, ...page }) => page),
       findings: withFindings ? (run.report?.findings ?? []).filter(f => f.severity === 'error' || f.severity === 'warning') : [],

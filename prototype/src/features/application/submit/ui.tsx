@@ -1,4 +1,4 @@
-import { DOCUMENT_TYPES } from '@/entities/application'
+import type { DocumentType } from '@/entities/application'
 import { useTranslation } from '@/shared/i18n'
 import { FieldDescription } from '@/shared/ui/components/field'
 
@@ -9,42 +9,24 @@ type Form = ReturnType<typeof useDraftForm>
 export function DraftFields({
   form,
   fileKey,
+  metadata,
 }: {
   form: Form
   fileKey: string
+  metadata?: { documentType: DocumentType; address: string }
 }) {
   const { t } = useTranslation()
-  const options = DOCUMENT_TYPES.map(value => ({
-    value,
-    label: t(`application.documentType.${value}`),
-  }))
-
   return (
     <>
-      <form.AppField
-        name="documentType"
-        validators={{ onDynamic: draftSchema.shape.documentType }}
-        children={field => (
-          <field.Root>
-            <field.Label>{t('application.fields.documentType')}</field.Label>
-            <field.Select options={options} className="w-full" />
-            <field.Error />
-          </field.Root>
-        )}
-      />
-      <form.AppField
-        name="address"
-        validators={{ onDynamic: draftSchema.shape.address }}
-        children={field => (
-          <field.Root>
-            <field.Label>{t('application.fields.address')}</field.Label>
-            <field.Input
-              placeholder={t('applicant.submit.addressPlaceholder')}
-            />
-            <field.Error />
-          </field.Root>
-        )}
-      />
+      <div className="rounded-lg border bg-muted/30 p-3 text-sm" aria-live="polite">
+        <p className="mb-2 text-xs text-muted-foreground">Сведения определяются из содержимого загруженных документов</p>
+        <dl className="grid gap-2">
+          <div><dt className="text-xs text-muted-foreground">{t('application.fields.documentType')}</dt>
+            <dd>{metadata ? t(`application.documentType.${metadata.documentType}`) : 'Определится после загрузки PDF'}</dd></div>
+          <div><dt className="text-xs text-muted-foreground">{t('application.fields.address')}</dt>
+            <dd>{metadata ? metadata.address || 'Адрес в документе не найден' : 'Будет извлечён из документа'}</dd></div>
+        </dl>
+      </div>
       <form.AppField
         name="description"
         validators={{ onDynamic: draftSchema.shape.description }}

@@ -119,6 +119,13 @@ def rules() -> dict:
     return _cached("rules", 300)
 
 
+def inspect_uploads(uploads: list[str]) -> dict:
+    if (not isinstance(uploads, list) or not uploads or len(uploads) > MAX_DOCUMENTS
+            or any(not isinstance(uid, str) or not _valid(uid) for uid in uploads)):
+        raise BadRequest("Неверные идентификаторы загрузок")
+    return rpc("inspect_uploads", {"uploads": uploads})
+
+
 def samples() -> list[dict]:
     return _cached("samples", 60)
 
@@ -284,6 +291,57 @@ def get_package(pid: str) -> dict:
     pkg["documents"] = docs
     pkg["progress"] = round(sum(1.0 if d.get("state") in ("done", "error") else float(d.get("progress") or 0) for d in docs) / max(1, len(docs)), 3)
     return pkg
+
+
+def save_checklist_review(pid: str, review: dict) -> dict:
+    """Пояснения GigaChat сохраняются отдельно и не меняют нормативный вердикт."""
+    pkg = get_package(pid)
+    if pkg.get("state") != "done":
+        raise BadRequest("Проверка пакета ещё не завершена")
+    if not isinstance(review, dict) or review.get("state") not in ("queued", "running", "done", "failed"):
+        raise BadRequest("Неверное состояние разбора")
+    titles = {c["rule"]: c.get("title", c["rule"]) for c in pkg.get("checks", [])}
+    allowed = set(titles)
+    items = review.get("items", [])
+    if not isinstance(items, list) or len(items) > len(allowed):
+        raise BadRequest("Неверные пункты разбора")
+    cleaned = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict) or item.get("id") not in allowed or item["id"] in seen:
+            raise BadRequest("Неизвестный или повторяющийся пункт чек-листа")
+        seen.add(item["id"])
+        citations = item.get("citations", [])
+        if not isinstance(citations, list) or len(citations) > 5:
+            raise BadRequest("Неверные ссылки на доказательства")
+        refs = []
+        for citation in citations:
+            if not isinstance(citation, dict) or not isinstance(citation.get("page"), int):
+                raise BadRequest("Неверная ссылка на страницу")
+            refs.append({"documentId": str(citation.get("documentId", ""))[:12],
+                         "file": str(citation.get("file", ""))[:200], "page": citation["page"],
+                         "quote": str(citation.get("quote", ""))[:700]})
+        cleaned.append({"id": item["id"], "title": titles[item["id"]], "explanation": str(item.get("explanation", ""))[:1800],
+                        "suggestion": str(item.get("suggestion", ""))[:1000], "citations": refs})
+    stored = {"state": review["state"], "items": cleaned,
+              "inputHash": str(review.get("inputHash", ""))[:64],
+              "model": str(review.get("model", ""))[:100], "provider": "gigachat",
+              "completed": len(cleaned), "total": len(allowed), "updatedAt": _now(),
+              "used": review.get("used") is True,
+              "error": str(review.get("error", ""))[:300]}
+    pkg["checklist_review"] = stored
+    get_store().save_package(pkg)
+    return stored
+
+
+def package_locations(pid: str) -> dict:
+    pkg = get_package(pid)
+    citations = [{**citation, "rule": item["id"]}
+                 for item in (pkg.get("checklist_review") or {}).get("items", [])
+                 for citation in item.get("citations", [])]
+    return rpc("locations", {"package_id": pid,
+                            "documents": [{"id": d["id"], "file": d["file"]} for d in pkg["documents"]],
+                            "citations": citations})
 
 
 def list_packages(limit: int = 50) -> list[dict]:

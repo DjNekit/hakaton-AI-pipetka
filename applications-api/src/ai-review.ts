@@ -1,4 +1,5 @@
 // Реальные результаты checker. Модель не определяет соответствие требованиям.
+import { checklistAssistant, readCheck } from './precheck'
 import { getApplication, readApplicationFiles, setAiReview } from './applications'
 import type { AiReview, AiReviewItem, DocumentType } from './model'
 
@@ -23,11 +24,11 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function checklistFor(type: DocumentType) {
   const { package_checklists: catalog } = await json<{
-    package_checklists: { sections: Record<string, Array<{
+    package_checklists: { profiles: Record<DocumentType, string[]>; sections: Record<string, Array<{
       id: string; title: string; requirement: string; ref: string; options: string[]
     }>> }
   }>(`${BACKEND}/api/rules`)
-  const sections = ['intake', ...(type === 'facade' ? ['special'] : []), type]
+  const sections = catalog.profiles[type]
   return sections.flatMap(section => catalog.sections[section].map(item => ({
     id: item.id, section, title: item.title, check: item.requirement,
     basis: item.ref, options: item.options,
@@ -62,18 +63,34 @@ export async function runAiReview(id: string) {
     while (Date.now() < deadline) {
       const pkg = await json<{ state: string; checks: PackageCheck[] }>(`${BACKEND}/api/packages/${base.packageId}`)
       if (pkg.state === 'done') {
+        const located = await readCheck(base.packageId!)
+        const locations = new Map(located.result?.checklist.map(item => [item.rule, item.locations]) ?? [])
+        try {
+          base.assistant = (await checklistAssistant(base.packageId!)).review
+        } catch {
+          base.assistant = { state: 'failed', items: [], completed: 0, total: pkg.checks.length,
+            error: 'Пояснения временно недоступны. Результаты проверки сохранены.' }
+        }
+
         const items: AiReviewItem[] = pkg.checks.map(check => {
           const verdict = check.status === 'fail' ? 'violation' : check.status === 'ok' ? 'ok' : 'unknown'
           const evidence = (check.evidence ?? []).map(e =>
             `${e.file}${e.page ? `, стр. ${e.page}` : ''}: ${e.quote ?? e.note ?? ''}`).join('\n')
-          return { id: check.rule, section: check.section ?? 'Пакет документов', title: check.title,
+          return { locations: locations.get(check.rule) ?? [], id: check.rule, section: check.section ?? 'Пакет документов', title: check.title,
             basis: check.ref, verdict, result: verdict === 'violation' ? 'Есть замечания' :
               verdict === 'ok' ? 'Соответствует' : 'Требуется проверка',
-            comment: [check.note, evidence].filter(Boolean).join('\n') }
+            comment: [check.note, evidence, ...((base.assistant?.items ?? []).filter(item => item.id === check.rule).map(item =>
+              `Пояснение: ${item.explanation}\n${item.suggestion}\n${item.citations.map(c => `${c.file}, стр. ${c.page}: «${c.quote}»`).join('\n')}`,
+            ))].filter(Boolean).join('\n') }
         })
         const violations = items.filter(i => i.verdict === 'violation').length
         const unknown = items.filter(i => i.verdict === 'unknown').length
-        setAiReview(id, { ...base, state: 'done', items,
+        if (base.assistant?.state === 'queued' || base.assistant?.state === 'running') {
+          setAiReview(id, { ...base, items, summary: `Уточняем пункты чек-листа: ${base.assistant.completed} из ${base.assistant.total}.` })
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          continue
+        }
+        setAiReview(id, { ...base, model: base.assistant?.used ? `rules + ${base.assistant.model}` : 'rules', state: 'done', items,
           summary: `Проверен пакет документов. Замечаний: ${violations}. Требуют проверки инспектором: ${unknown}.`,
           finishedAt: new Date().toISOString() })
         return

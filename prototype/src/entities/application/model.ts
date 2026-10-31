@@ -26,7 +26,22 @@ export const VERDICTS = [
 export type Verdict = (typeof VERDICTS)[number]
 export type AiVerdict = Verdict
 
+export interface FindingLocation {
+  documentId: string
+  file: string
+  page: number
+  bbox: [number, number, number, number] | null
+  quote?: string
+}
+
+export interface SheetSelection extends FindingLocation {
+  rule: string
+  message: string
+  severity: 'error' | 'warning'
+}
+
 export interface AiReviewItem {
+  locations?: FindingLocation[]
   id: string
   section: string
   title: string
@@ -36,7 +51,24 @@ export interface AiReviewItem {
   comment: string
 }
 
+export interface ChecklistAssistantReview {
+  state: 'queued' | 'running' | 'done' | 'failed'
+  model?: string
+  used?: boolean
+  completed: number
+  total: number
+  error?: string
+  items: Array<{
+    id: string
+    title?: string
+    explanation: string
+    suggestion: string
+    citations: Array<{ documentId: string; file: string; page: number; quote: string }>
+  }>
+}
+
 export interface AiReview {
+  assistant?: ChecklistAssistantReview
   state: 'running' | 'done' | 'failed'
   summary: string
   items: AiReviewItem[]
@@ -83,6 +115,8 @@ export interface VersionSummary {
 }
 
 export interface ApplicationVersion {
+  address: string
+  documentType: DocumentType
   files?: Array<{ name: string; index: number }>
   id: string
   version: number

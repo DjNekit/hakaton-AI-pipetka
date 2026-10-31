@@ -34,8 +34,11 @@ export const api = {
     return request("/uploads", { method: "POST", body: fd }, FILES);
   },
   createPackage: ({ uploads = [], samples = [], title = "", service_type = null }) => request("/packages", json("POST", { uploads, samples, title, service_type })),
+  inspectUploads: uploads => request("/uploads/inspect", json("POST", { uploads })),
   packages: () => request("/packages").then((d) => d.packages),
+  packageLocations: id => request(`/packages/${encodeURIComponent(id)}/locations`),
   package: (id) => request(`/packages/${id}`),
+  packageChecklistReview: (id) => request(`/packages/${encodeURIComponent(id)}/checklist-review`).then(d => d.review),
   checkSample: (name) => request(`/samples/${name}/check`, { method: "POST" }),
 
   // документ пакета

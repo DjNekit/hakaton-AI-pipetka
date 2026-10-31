@@ -13,7 +13,10 @@ def review_package(docs: list[dict], service_type: str | None = None,
     done = [d for d in docs if d.get("state") == "done"]
     kinds = {d["report"].get("document_kind") for d in done}
     profiles = [service_type] if service_type else [k for k in ("passport", "signage", "facade") if k in kinds]
-    sections = ["intake"] + (["special"] if "facade" in profiles else []) + profiles
+    sections = list(dict.fromkeys(section for profile in profiles
+                                  for section in catalog["profiles"][profile]))
+    if not profiles:
+        sections = ["intake"]
     checks = []
     for section in sections:
         for source in catalog["sections"][section]:

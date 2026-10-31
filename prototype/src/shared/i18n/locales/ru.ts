@@ -148,6 +148,11 @@ export default {
       success: 'Заявка {{number}} подана',
       fileHint: 'Только PDF, до 50 МБ',
       errors: {
+        document_type_mismatch: 'Тип документа изменён. Запустите проверку новой версии.',
+        document_type_unknown: 'Не удалось определить вид документа по содержимому PDF.',
+        mixed_document_types: 'В пакете документы разных видов. Загрузите их отдельными заявками.',
+        document_addresses_conflict: 'В документах указаны разные адреса объекта.',
+        document_address_missing: 'Адрес объекта в PDF не найден. Уточните документ и загрузите новую версию.',
         checker_unavailable: 'Сервис проверки недоступен',
         invalid_file: 'Нужен PDF-файл',
         file_too_large: 'Файл больше 50 МБ',

@@ -5,12 +5,15 @@ from . import views
 urlpatterns = [
     path("health", views.health),
     path("rules", views.rules),
+    path("uploads/inspect", views.inspect_uploads),
     path("samples", views.samples),
     path("samples/<str:name>/pdf", views.sample_pdf),
     path("samples/<str:name>/check", views.sample_check),
     # пакеты документов одной заявки
     path("packages", views.packages),
     path("packages/<str:package_id>", views.package_detail),
+    path("packages/<str:package_id>/checklist-review", views.package_checklist_review),
+    path("packages/<str:package_id>/locations", views.package_locations),
     # документы пакета
     path("checks/<str:run_id>", views.check_detail),
     path("checks/<str:run_id>/report.json", views.check_report),

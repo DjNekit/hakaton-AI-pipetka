@@ -6,10 +6,11 @@ import {
   ToggleGroupItem,
 } from '@/shared/ui/components/toggle-group'
 
-import type { AiReview, ApproverReview, Verdict } from '../model'
+import type { AiReview, ApproverReview, Verdict, FindingLocation, SheetSelection } from '../model'
 import { VerdictIcon } from './ai-review'
 
 interface Row {
+  locations?: FindingLocation[]
   id: string
   section: string
   title: string
@@ -30,6 +31,7 @@ function buildRows(ai: AiReview | null, approver: ApproverReview | null) {
     const row = rows.get(item.id) ?? { ...item }
     rows.set(item.id, {
       ...row,
+      locations: item.locations,
       ai: {
         verdict: item.verdict,
         comment: [item.result, item.comment].filter(Boolean).join(' · '),
@@ -72,7 +74,7 @@ function Opinion({
         </span>
         {opinion.comment && (
           <span className="text-xs text-muted-foreground">
-            {opinion.comment}
+            {opinion.comment.replace(/Пояснение GigaChat \(черновик\):/g, 'Пояснение:')}
           </span>
         )}
       </span>
@@ -83,9 +85,11 @@ function Opinion({
 export function ReviewComparison({
   ai,
   approver,
+  onSelect,
 }: {
   ai: AiReview | null
   approver: ApproverReview | null
+  onSelect?: (selection: SheetSelection | null) => void
 }) {
   const { t } = useTranslation()
   const [filter, setFilter] = useState<'diff' | 'all'>('diff')
@@ -136,7 +140,13 @@ export function ReviewComparison({
                   key={row.id}
                   className={`flex flex-col gap-2 px-3 py-2.5 ${isMismatch(row) ? 'bg-amber-500/5' : ''}`}
                 >
-                  <span className="text-sm font-medium">{row.title}</span>
+                  <button type="button" className="text-left text-sm font-medium hover:underline" onClick={() => {
+                    const location = row.locations?.[0]
+                    onSelect?.(location ? { ...location, rule: row.id, message: row.title, severity: row.ai?.verdict === 'violation' ? 'error' : 'warning' } : null)
+                  }}>{row.title}</button>
+                  {row.locations?.map((location, index) => <button key={index} type="button" className="text-left text-xs underline" onClick={() => onSelect?.({ ...location, rule: row.id, message: row.title, severity: row.ai?.verdict === 'violation' ? 'error' : 'warning' })}>
+                    {location.file} · Лист {location.page}
+                  </button>)}
                   <Opinion
                     label={t('normcontrol.compare.ai')}
                     opinion={row.ai}

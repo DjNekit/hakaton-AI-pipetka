@@ -19,6 +19,8 @@ from colorpass.checks import load_rules
 from colorpass.pipeline import run_check, template_conclusion
 
 from . import storage
+from .identify import inspect_uploads
+from .locations import package_locations
 from .package import package_checks
 from .checklist import review_package
 from .redisq import READY, Redis, progress_key, result_key
@@ -91,7 +93,8 @@ def check_package(r: Redis, args: dict) -> None:
         finally:
             merged.close()
         try:
-            report = run_check(pdir / "input.pdf", pdir / "combined", write_images=False)
+            report = run_check(pdir / "input.pdf", pdir / "combined", write_images=False,
+                               profile=service_type)
         except Exception as exc:  # noqa: BLE001 — пакет должен завершиться и сообщить об ошибке
             log.exception("Не удалось проверить сводный документ пакета %s", pkg)
             report = {"document_kind": service_type, "checklist": [], "findings": [],
@@ -391,6 +394,8 @@ def archive(args: dict) -> dict:
 
 
 RPC_HANDLERS = {
+    "locations": package_locations,
+    "inspect_uploads": inspect_uploads,
     "rules": rules,
     "samples": samples,
     "blocks": blocks,

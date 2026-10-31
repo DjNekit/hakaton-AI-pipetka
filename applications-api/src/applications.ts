@@ -31,6 +31,8 @@ type Row = Omit<
 }
 
 interface VersionRow {
+  address: string
+  documentType: DocumentType
   id: string
   applicationId: string
   version: number
@@ -107,11 +109,24 @@ function connection() {
       createdAt text not null
     )
   `)
+  const versionColumns = db.prepare<[], { name: string }>('pragma table_info(application_version)').all()
+  if (!versionColumns.some(column => column.name === 'documentType')) {
+    db.exec('alter table application_version add column documentType text')
+  }
+  if (!versionColumns.some(column => column.name === 'address')) {
+    db.exec('alter table application_version add column address text')
+  }
   db.exec(`
     insert into application_version (id, applicationId, version, fileName, filePath, packageId, createdAt)
     select lower(hex(randomblob(16))), id, 1, fileName, filePath, '', createdAt from application
     where not exists (select 1 from application_version v where v.applicationId = application.id)
   `)
+  db.exec(`update application_version set documentType = (
+    select documentType from application where id = application_version.applicationId
+  ) where documentType is null`)
+  db.exec(`update application_version set address = (
+    select address from application where id = application_version.applicationId
+  ) where address is null`)
   db.exec(`
     update application set submittedVersionId = (
       select v.id from application_version v where v.applicationId = application.id order by v.version desc limit 1
@@ -137,6 +152,8 @@ function parse<T>(value: string | null) {
 
 function toVersion(row: VersionRow): ApplicationVersion {
   return {
+    documentType: row.documentType,
+    address: row.address,
     files: connection().prepare<[string], { name: string; index: number }>(
       'select name, position as "index" from application_version_file where versionId = ? order by position',
     ).all(row.id),
@@ -214,6 +231,8 @@ function insertVersion(
   applicationId: string,
   file: { name: string; path: string },
   packageId: string,
+  documentType: DocumentType,
+  address: string,
   attachments: Array<{ name: string; path: string }> = [],
 ) {
   const id = randomUUID()
@@ -224,8 +243,8 @@ function insertVersion(
     .get(applicationId)!
   connection()
     .prepare(
-      `insert into application_version (id, applicationId, version, fileName, filePath, packageId, createdAt)
-       values (@id, @applicationId, @version, @fileName, @filePath, @packageId, @createdAt)`,
+      `insert into application_version (id, applicationId, version, fileName, filePath, packageId, documentType, address, createdAt)
+       values (@id, @applicationId, @version, @fileName, @filePath, @packageId, @documentType, @address, @createdAt)`,
     )
     .run({
       id,
@@ -234,6 +253,8 @@ function insertVersion(
       fileName: file.name,
       filePath: file.path,
       packageId,
+      documentType,
+      address,
       createdAt: new Date().toISOString(),
     })
   const save = connection().prepare(
@@ -291,7 +312,7 @@ export async function createDraft(
         filePath,
         now,
       })
-    insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
+    insertVersion(id, { name: file.name, path: filePath }, packageId, input.documentType, input.address, additionalFiles)
   })()
   notifyChange(id)
   return getApplication(id)!
@@ -307,7 +328,7 @@ export async function addVersion(
   const filePath = await storeFile(randomUUID(), file)
   const additionalFiles = await storeAttachments(attachments)
   connection().transaction(() => {
-    insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
+    insertVersion(id, { name: file.name, path: filePath }, packageId, input.documentType, input.address, additionalFiles)
     touch(id, { ...input, fileName: file.name, filePath })
   })()
   notifyChange(id)
@@ -347,10 +368,13 @@ export function submitDraft(id: string, versionId: string, input: DraftFields) {
   if (application.status !== 'draft') return { error: 'invalid_state' as const }
   const version = findVersion(id, versionId)
   if (!version) return { error: 'not_found' as const }
+  if (!version.address) return { error: 'document_address_missing' as const }
   connection().transaction(() => {
     selectVersionFiles(id, version.id)
     touch(id, {
       ...input,
+      documentType: version.documentType,
+      address: version.address,
       fileName: version.fileName,
       filePath: version.filePath,
       submittedVersionId: version.id,

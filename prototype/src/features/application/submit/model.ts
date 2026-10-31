@@ -1,8 +1,6 @@
 import {
   applicationKeys,
-  documentTypeSchema,
   type Application,
-  type DocumentType,
 } from '@/entities/application'
 import { HttpError, apiUrl, requestJson } from '@/shared/api'
 import { i18n, z } from '@/shared/i18n'
@@ -12,8 +10,6 @@ import { blurFirstValidationLogic, useAppForm } from '@/shared/ui/form'
 const MAX_FILE_SIZE = 50 * 1024 * 1024
 
 export const draftSchema = z.object({
-  documentType: documentTypeSchema,
-  address: z.string().trim().nonempty().max(300),
   description: z.string().max(2000),
 })
 
@@ -27,8 +23,6 @@ export function fileValidator({ value }: { value: File[] }) {
 }
 
 export interface DraftValues {
-  documentType: DocumentType
-  address: string
   description: string
   files: File[]
 }
@@ -44,8 +38,6 @@ const errorMeta = {
 
 function uploadBody(values: DraftValues, files: File[]) {
   const body = new FormData()
-  body.set('documentType', values.documentType)
-  body.set('address', values.address.trim())
   body.set('description', values.description.trim())
   for (const file of files) body.append('files', file)
   return body
@@ -96,8 +88,6 @@ export function useSubmitDraft(applicationId: string) {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             versionId,
-            documentType: values.documentType,
-            address: values.address.trim(),
             description: values.description.trim(),
           }),
         },
@@ -113,8 +103,6 @@ export function useDraftForm(
 ) {
   return useAppForm({
     defaultValues: {
-      documentType: application?.documentType ?? 'passport',
-      address: application?.address ?? '',
       description: application?.description ?? '',
       files: [],
     } as DraftValues,

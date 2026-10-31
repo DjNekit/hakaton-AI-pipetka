@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 
-import { applicationKeys } from '@/entities/application'
+import { applicationKeys, type ChecklistAssistantReview, type FindingLocation } from '@/entities/application'
 import { apiUrl, requestJson } from '@/shared/api'
 import { queryOptions, useQuery, useQueryClient } from '@/shared/query'
 
 export interface PrecheckFinding {
+  locations?: FindingLocation[]
+  status?: string
   rule: string
   title: string
   ref: string
@@ -23,6 +25,7 @@ export interface VersionCheck {
     checkId: string
     documentKind: 'passport' | 'signage'
     verdict: string
+    checklist?: PrecheckFinding[]
     findings: PrecheckFinding[]
   } | null
 }
@@ -104,4 +107,21 @@ export function checkOutcome(check: VersionCheck | undefined) {
     : errors
       ? ('errors' as const)
       : ('warnings' as const)
+}
+
+export function useChecklistAssistant(applicationId: string, versionId: string) {
+  const queryClient = useQueryClient()
+  const queryKey = ['applications', applicationId, 'versions', versionId, 'llm-review']
+  const query = useQuery({
+    queryKey,
+    queryFn: () => requestJson<{ review: ChecklistAssistantReview }>(apiUrl(`${base(applicationId, versionId)}/llm-review`)),
+    refetchInterval: query => ['done', 'failed'].includes(query.state.data?.review?.state ?? '') ? false : 3000,
+    staleTime: 30000,
+    retry: false,
+  })
+  const retry = async () => {
+    const data = await requestJson<{ review: ChecklistAssistantReview }>(apiUrl(`${base(applicationId, versionId)}/llm-review`), { method: 'POST' })
+    queryClient.setQueryData(queryKey, data)
+  }
+  return { ...query, retry }
 }

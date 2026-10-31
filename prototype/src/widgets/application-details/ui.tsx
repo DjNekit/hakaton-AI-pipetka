@@ -14,6 +14,8 @@ import {
   VersionHistory,
   type Application,
   type ChecklistItem,
+  type SheetSelection,
+  type FindingLocation,
 } from '@/entities/application'
 import type { Role } from '@/entities/auth'
 import {
@@ -22,6 +24,7 @@ import {
 } from '@/features/application/approver-review'
 import { DecisionFields, useDecisionForm } from '@/features/application/decide'
 import { useTranslation } from '@/shared/i18n'
+import { apiUrl, requestJson } from '@/shared/api'
 import { Skeleton } from '@/shared/ui/components/skeleton'
 
 export type StaffRole = Exclude<Role, 'applicant'>
@@ -111,9 +114,13 @@ function DecisionForm({ application }: { application: Application }) {
   )
 }
 
-function NormcontrolWork({ application }: { application: Application }) {
+function NormcontrolWork({ application, onSelect }: { application: Application; onSelect?: (selection: SheetSelection | null) => void }) {
   const { t } = useTranslation()
   const { aiReview, approverReview } = application
+  const linked = useQuery({
+    queryKey: ['applications', application.id, 'locations', application.aiReview?.assistant?.completed],
+    queryFn: () => requestJson<{ locations: Record<string, FindingLocation[]> }>(apiUrl(`/applications/${application.id}/locations`)),
+  })
   const aiDone = aiReview?.state === 'done' || aiReview?.state === 'failed'
 
   return (
@@ -133,6 +140,11 @@ function NormcontrolWork({ application }: { application: Application }) {
           <ApproverConclusion review={approverReview} />
         </Section>
       )}
+      {aiReview?.assistant?.state === 'failed' && (
+        <p className="rounded-lg border p-3 text-sm text-muted-foreground">
+          Часть пояснений недоступна. Результаты проверки сохранены.
+        </p>
+      )}
       {aiReview?.summary && (
         <Section title={t('normcontrol.compare.aiSummary')}>
           <p className="text-sm">{aiReview.summary}</p>
@@ -141,8 +153,9 @@ function NormcontrolWork({ application }: { application: Application }) {
       {(aiDone || approverReview) && (
         <Section title={t('normcontrol.compare.title')}>
           <ReviewComparison
-            ai={aiDone ? aiReview : null}
+            ai={aiDone && aiReview ? { ...aiReview, items: aiReview.items.map(item => ({ ...item, locations: linked.data?.locations[item.id] ?? item.locations })) } : null}
             approver={approverReview}
+            onSelect={onSelect}
           />
         </Section>
       )}
@@ -202,6 +215,7 @@ export function ApplicationReview({
 }) {
   const { t } = useTranslation()
   const { data, isPending, isError } = useQuery(applicationQueryOptions(id))
+  const [selection, setSelection] = useState<SheetSelection | null>(null)
   const [tab, setTab] = useState<'work' | 'properties' | 'history'>('work')
 
   if (isPending) return <Skeleton className="h-64" />
@@ -214,7 +228,7 @@ export function ApplicationReview({
     role === 'approver' ? (
       <ApproverWork key={data.status} application={data} />
     ) : (
-      <NormcontrolWork application={data} />
+      <NormcontrolWork application={data} onSelect={setSelection} />
     )
   const decision = <DecisionBlock application={data} role={role} />
   const history = (
@@ -229,7 +243,7 @@ export function ApplicationReview({
       <div className={layout === 'panel'
         ? 'grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3'
         : 'grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_24rem] md:grid-rows-1'}>
-        <ApplicationSheetViewer key={data.id} application={data} />
+        <ApplicationSheetViewer key={data.id} application={data} selection={selection} />
         <aside className="flex min-h-0 min-w-0 flex-col gap-3 rounded-xl border p-3">
           <nav className="flex shrink-0 gap-1 border-b pb-2" aria-label="Разделы проверки">
             {([['work', 'Проверка'], ['properties', 'Заявка'], ['history', 'Версии']] as const).map(([value, label]) => (

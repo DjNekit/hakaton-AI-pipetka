@@ -5,6 +5,7 @@ import {
   ApplicationSheetViewer,
   formatApplicationNumber,
   type Application,
+  type SheetSelection,
 } from '@/entities/application'
 import {
   checkOutcome,
@@ -77,9 +78,11 @@ export function DraftEditor({
   const { t } = useTranslation()
   const versions = application?.versions ?? []
   const [selectedId, setSelectedId] = useState(versions[0]?.id)
+  const [selection, setSelection] = useState<SheetSelection | null>(null)
   const latestId = versions[0]?.id
   useEffect(() => {
     setSelectedId(latestId)
+    setSelection(null)
   }, [latestId])
   const [panel, setPanel] = useState<'fields' | 'check'>(application ? 'check' : 'fields')
   const fileZone = useRef<HTMLDivElement>(null)
@@ -102,6 +105,7 @@ export function DraftEditor({
       .catch(() => undefined)
     if (!updated) return
     setPanel('check')
+    form.setFieldValue('description', updated.description)
     form.setFieldValue('files', [])
     if (!application) onCreated(updated)
   }
@@ -117,6 +121,9 @@ export function DraftEditor({
         <h1 className="shrink-0 truncate text-base font-semibold">
           {application ? t('applicant.draft.title', { number: formatApplicationNumber(application.number) }) : t('applicant.submit.title')}
         </h1>
+        {application && <p className="shrink-0 truncate text-xs text-muted-foreground" title={versions.find(version => version.id === selectedId)?.address || application.address}>
+          {versions.find(version => version.id === selectedId)?.address || 'Адрес объекта в документе не найден'}
+        </p>}
         <nav className="flex shrink-0 gap-2" aria-label="Работа с заявкой">
           <Button type="button" size="sm" variant={panel === 'fields' ? 'default' : 'outline'} onClick={() => setPanel('fields')}>Данные и файлы</Button>
           <Button type="button" size="sm" variant={panel === 'check' ? 'default' : 'outline'} onClick={() => setPanel('check')}>Проверка</Button>
@@ -125,14 +132,14 @@ export function DraftEditor({
           <form.AppForm>
             <form.Root className="flex flex-col gap-4">
               <div ref={fileZone} className="flex flex-col gap-4">
-                <DraftFields form={form} fileKey={String(versions.length)} />
+                <DraftFields form={form} fileKey={String(versions.length)} metadata={versions.find(version => version.id === selectedId) ?? application} />
               </div>
               <form.Subscribe selector={state => state.values.files}>
                 {files => (
                   <Button type="button" className="self-start" disabled={!files.length || checkVersion.isPending}
                     aria-busy={checkVersion.isPending} onClick={() => void runCheck()}>
                     <SpinnerAddon enabled={checkVersion.isPending} /><IconFileSearch />
-                    {versions.length ? t('applicant.draft.checkNew') : t('applicant.draft.check')}
+                    {checkVersion.isPending ? 'Определяем сведения из PDF…' : versions.length ? t('applicant.draft.checkNew') : t('applicant.draft.check')}
                   </Button>
                 )}
               </form.Subscribe>
@@ -142,11 +149,11 @@ export function DraftEditor({
         <div className={panel === 'check' ? 'flex min-h-0 flex-1 flex-col gap-3' : 'hidden'}>
           {versions.length > 0 && <select aria-label="Версия документов" value={selectedId ?? ''}
             className="w-full shrink-0 rounded-lg border bg-background p-2 text-sm"
-            onChange={event => setSelectedId(event.target.value)}>
-            {versions.map(version => <option key={version.id} value={version.id}>Версия {version.version} · {version.fileName}</option>)}
+            onChange={event => { setSelectedId(event.target.value); setSelection(null) }}>
+            {versions.map(version => <option key={version.id} value={version.id}>Версия {version.version} · {t(`application.documentType.${version.documentType}`)} · {version.fileName}</option>)}
           </select>}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {application && selectedId ? <VersionCheckResult key={selectedId} applicationId={application.id} versionId={selectedId} />
+            {application && selectedId ? <VersionCheckResult key={selectedId} applicationId={application.id} versionId={selectedId} onSelect={setSelection} />
               : <p className="text-sm text-muted-foreground">{t('applicant.draft.empty')}</p>}
           </div>
           {application && selectedId && <div className="shrink-0 border-t pt-3">
@@ -155,7 +162,7 @@ export function DraftEditor({
           </div>}
         </div>
       </section>
-      {application && selectedId ? <ApplicationSheetViewer key={selectedId} application={application}
+      {application && selectedId ? <ApplicationSheetViewer key={selectedId} application={application} selection={selection}
         version={versions.find(version => version.id === selectedId)} />
         : <div className="grid min-h-0 place-content-center rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Загрузите документы и запустите проверку, чтобы увидеть листы</div>}
     </div>

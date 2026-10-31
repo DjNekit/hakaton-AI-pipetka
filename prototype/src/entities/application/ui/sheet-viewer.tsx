@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { apiUrl, requestJson } from '@/shared/api'
 import { useQuery } from '@/shared/query'
 
-import type { Application, ApplicationVersion } from '../model'
+import type { Application, ApplicationVersion, SheetSelection } from '../model'
 
 interface Finding {
   id: string
@@ -17,15 +17,17 @@ interface Sheets {
   state: string
   documents: Array<{
     index: number
+    id: string
     name: string
     pages: Array<{ index: number; number: number; width: number; height: number; kind_title: string; notes?: string[] }>
     findings: Finding[]
   }>
 }
 
-export function ApplicationSheetViewer({ application, version }: {
+export function ApplicationSheetViewer({ application, version, selection }: {
   application: Application
   version?: ApplicationVersion
+  selection?: SheetSelection | null
 }) {
   const [fileIndex, setFileIndex] = useState(0)
   const [pageIndex, setPageIndex] = useState(0)
@@ -41,13 +43,29 @@ export function ApplicationSheetViewer({ application, version }: {
     refetchInterval: query => query.state.data?.state === 'done' ? false : 2000,
   })
   const documents = query.data?.documents ?? []
+  const appliedSelection = useRef<SheetSelection | null>(null)
+  const [activeSelection, setActiveSelection] = useState<SheetSelection | null>(null)
+  useEffect(() => {
+    if (!selection) { appliedSelection.current = null; setActiveSelection(null); return }
+    if (selection === appliedSelection.current) return
+    const index = query.data?.documents.find(document => document.id === selection.documentId)?.index
+    if (index === undefined) return
+    appliedSelection.current = selection
+    setFileIndex(index)
+    setPageIndex(selection.page - 1)
+    setActiveSelection(selection)
+    setSelected(undefined)
+    setZoom(1)
+    setImageError(false)
+  }, [selection, query.data])
   const document = documents.find(doc => doc.index === fileIndex) ?? documents[0]
   const pages = document?.pages ?? []
   const page = pages.find(page => page.index === pageIndex) ?? pages[0]
   const position = page ? pages.indexOf(page) : 0
   const imageUrl = page && document ? apiUrl(`${path}?file=${document.index}&page=${page.index}`) : undefined
-  const changePage = (index: number) => { setPageIndex(index); setSelected(undefined); setImageError(false) }
+  const changePage = (index: number) => { setPageIndex(index); setActiveSelection(null); setSelected(undefined); setImageError(false) }
   const selectFinding = (finding: Finding) => {
+    setActiveSelection(null)
     setSelected(finding.id)
     if (finding.page !== null) setPageIndex(finding.page)
     setImageError(false)
@@ -80,6 +98,14 @@ export function ApplicationSheetViewer({ application, version }: {
             viewBox={`0 0 ${page.width} ${page.height}`} preserveAspectRatio="xMidYMid meet"
             style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%`, minHeight: '100%' }}>
             <image href={imageUrl} width={page.width} height={page.height} onError={() => setImageError(true)} />
+            {activeSelection?.bbox && activeSelection.documentId === document?.id && activeSelection.page === page.number && <g aria-label={activeSelection.message}>
+              <title>{activeSelection.message}</title>
+              <rect x={activeSelection.bbox[0] - 4} y={activeSelection.bbox[1] - 4}
+                width={Math.max(1, activeSelection.bbox[2] - activeSelection.bbox[0]) + 8}
+                height={Math.max(1, activeSelection.bbox[3] - activeSelection.bbox[1]) + 8}
+                fill={activeSelection.severity === 'error' ? '#ef444433' : '#f59e0b33'}
+                stroke={activeSelection.severity === 'error' ? '#ef4444' : '#f59e0b'} strokeWidth={3} vectorEffect="non-scaling-stroke" />
+            </g>}
             {document?.findings.filter(f => f.page === page.index && f.bbox).map(f => {
               const [x0, y0, x1, y1] = f.bbox!
               const active = f.id === selected
@@ -99,6 +125,9 @@ export function ApplicationSheetViewer({ application, version }: {
           <option value="">Замечания на листах — выберите для перехода</option>
           {document?.findings.map(f => <option key={f.id} value={f.id}>{f.page !== null ? `Лист ${f.page + 1}: ` : ''}{f.message}</option>)}
         </select>}
+        {activeSelection && <p role="status" className="shrink-0 text-xs">
+          {activeSelection.message}{!activeSelection.bbox ? ' · Лист найден, точная область не определена' : ''}
+        </p>}
         {selected && <p className="line-clamp-2 shrink-0 text-xs">{document?.findings.find(f => f.id === selected)?.message}</p>}
         {page.notes?.length ? <p className="line-clamp-2 shrink-0 text-xs text-muted-foreground">{page.notes.join(' ')}</p> : null}
       </>}

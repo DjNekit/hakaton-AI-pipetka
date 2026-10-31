@@ -18,6 +18,7 @@
 import { serve } from '@hono/node-server'
 import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
+import { chatStatus } from './chat-status'
 import { readSheets, readSheetImage } from './sheets'
 import { streamSSE } from 'hono/streaming'
 import { subscribeApplications } from './events'
@@ -41,7 +42,7 @@ import {
 import { auth } from './auth'
 import { getCurrentUser, jsonError } from './current-user'
 import { readMailbox } from './mailbox'
-import { adviceFor, readCheck, startCheck, UpstreamError } from './precheck'
+import { adviceFor, checklistAssistant, readCheck, readLocations, startCheck, UpstreamError } from './precheck'
 import {
   approverReviewSchema,
   decisionSchema,
@@ -60,6 +61,13 @@ function text(value: FormDataEntryValue | null) {
 const app = new Hono().basePath('/new/api')
 
 app.get('/health', c => c.json({ ok: true }))
+
+app.get('/chat/health', async c => {
+  const user = await getCurrentUser(c.req.raw)
+  if (!user) return jsonError(401, 'unauthorized')
+  c.header('Cache-Control', 'no-store')
+  return c.json(await chatStatus(CHAT_URL))
+})
 
 app.on(['GET', 'POST'], '/auth/*', c => auth.handler(c.req.raw))
 
@@ -119,19 +127,15 @@ app.get('/applications/:id', async c => {
 
 async function readUpload(request: Request) {
   const form = await request.formData()
-  const fields = draftFieldsSchema.safeParse({
-    documentType: form.get('documentType'),
-    address: text(form.get('address')),
-    description: text(form.get('description')),
-  })
+  const description = draftFieldsSchema.shape.description.safeParse(text(form.get('description')))
   const files = [...form.getAll('files'), ...form.getAll('file')]
   const file = files[0]
-  if (!fields.success) return { error: 'invalid_fields' as const }
+  if (!description.success) return { error: 'invalid_fields' as const }
   if (!files.length || files.length > 20 || files.some(file => !(file instanceof File) || file.type !== 'application/pdf')) {
     return { error: 'invalid_file' as const }
   }
   if (files.some(file => (file as File).size > MAX_FILE_SIZE)) return { error: 'file_too_large' as const }
-  return { fields: fields.data, file: file as File, files: files as File[] }
+  return { fields: { description: description.data }, file: file as File, files: files as File[] }
 }
 
 function upstreamError(error: unknown) {
@@ -156,8 +160,9 @@ app.post('/applications/drafts', async c => {
   const upload = await readUpload(c.req.raw)
   if (upload.error) return jsonError(400, upload.error)
   try {
-    const packageId = await startCheck(upload.files, upload.fields.documentType)
-    const draft = await createDraft(user, upload.fields, upload.file, packageId, upload.files.slice(1))
+    const detected = await startCheck(upload.files)
+    const fields = { ...upload.fields, documentType: detected.documentType, address: detected.address }
+    const draft = await createDraft(user, fields, upload.file, detected.packageId, upload.files.slice(1))
     return c.json(forViewer(user, draft), 201)
   } catch (error) {
     return upstreamError(error)
@@ -171,12 +176,13 @@ app.post('/applications/:id/versions', async c => {
   const upload = await readUpload(c.req.raw)
   if (upload.error) return jsonError(400, upload.error)
   try {
-    const packageId = await startCheck(upload.files, upload.fields.documentType)
+    const detected = await startCheck(upload.files)
+    const fields = { ...upload.fields, documentType: detected.documentType, address: detected.address }
     const draft = await addVersion(
       owned.application.id,
-      upload.fields,
+      fields,
       upload.file,
-      packageId,
+      detected.packageId,
       upload.files.slice(1),
     )
     return c.json(forViewer(owned.user, draft), 201)
@@ -204,6 +210,16 @@ app.get('/applications/:id/versions/:vid/check', async c => {
   } catch (error) {
     return upstreamError(error)
   }
+})
+
+app.on(['GET', 'POST'], '/applications/:id/versions/:vid/llm-review', async c => {
+  const owned = await ownDraft(c.req.raw, c.req.param('id'))
+  if (owned.response) return owned.response
+  const version = findVersion(owned.application.id, c.req.param('vid'))
+  if (!version?.packageId) return jsonError(404, 'not_found')
+  try {
+    return c.json(await checklistAssistant(version.packageId, c.req.method === 'POST'))
+  } catch (error) { return upstreamError(error) }
 })
 
 app.post('/applications/:id/versions/:vid/advice', async c => {
@@ -279,13 +295,27 @@ app.post('/applications/:id/submit', async c => {
   if (owned.response) return owned.response
   const body = submitSchema.safeParse(await c.req.json().catch(() => null))
   if (!body.success) return jsonError(400, 'invalid_fields')
-  const { versionId, ...fields } = body.data
+  const { versionId, description } = body.data
+  const fields = { documentType: owned.application.documentType, address: owned.application.address, description }
   const result = submitDraft(owned.application.id, versionId, fields)
   if (result.error) {
     return jsonError(result.error === 'not_found' ? 404 : 409, result.error)
   }
   void runAiReview(result.application.id)
   return c.json(forViewer(owned.user, result.application))
+})
+
+app.get('/applications/:id/locations', async c => {
+  const user = await getCurrentUser(c.req.raw)
+  if (!user) return jsonError(401, 'unauthorized')
+  if (user.role === 'approver') return jsonError(403, 'forbidden')
+  const application = getApplication(c.req.param('id'))
+  if (!application || !canAccess(user, application)) return jsonError(404, 'not_found')
+  const packageId = application.aiReview?.packageId ?? (application.submittedVersionId
+    ? findVersion(application.id, application.submittedVersionId)?.packageId : undefined)
+  if (!packageId) return c.json({ locations: {} })
+  try { return c.json(await readLocations(packageId)) }
+  catch (error) { return upstreamError(error) }
 })
 
 app.get('/applications/:id/checklist', async c => {

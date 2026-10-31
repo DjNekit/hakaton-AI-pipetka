@@ -35,12 +35,19 @@ export class GigaChat {
   provider = "gigachat";
   #token = null;
   #expires = 0;
+  #tokenRequest = null;
 
   constructor({ key, scope, model, baseUrl, authUrl }) {
     Object.assign(this, { key, scope, model, baseUrl, authUrl });
   }
 
   async token(force = false) {
+    if (!force && this.#token && this.#expires - Date.now() > 60_000) return this.#token;
+    if (!this.#tokenRequest) this.#tokenRequest = this.#requestToken(force);
+    try { return await this.#tokenRequest; } finally { this.#tokenRequest = null; }
+  }
+
+  async #requestToken(force = false) {
     if (!this.key) throw new LlmError("Не задан ключ GigaChat API (GIGACHAT_AUTH_KEY)");
     if (!force && this.#token && this.#expires - Date.now() > 60_000) return this.#token;
     let res;
@@ -142,24 +149,34 @@ export class GigaChat {
 // ---------------------------------------------------------------- модель сервиса
 
 const gigachat = new GigaChat(config.gigachat);
+let statusCache;
+let statusRequest;
+async function cachedStatus() {
+  if (statusCache && statusCache.expires > Date.now()) return statusCache.value;
+  if (!statusRequest) statusRequest = gigachat.status().then(value => {
+    statusCache = { value, expires: Date.now() + (value.available ? 30000 : 10000) };
+    return value;
+  });
+  try { return await statusRequest; } finally { statusRequest = null; }
+}
 
 export const llm = {
   /** Доступна ли модель: { available, provider, model, error }. */
   async status() {
-    const st = await gigachat.status();
+    const st = await cachedStatus();
     return { available: st.available, provider: "gigachat", model: st.model, error: st.error ?? null };
   },
 
   /** Разовая задача → { text, provider, model }. */
   async complete(task) {
-    const st = await gigachat.status();
+    const st = await cachedStatus();
     if (!st.available) throw new LlmError(st.error || "GigaChat недоступен");
     return { text: await gigachat.complete({ ...task, model: st.model }), provider: "gigachat", model: st.model };
   },
 
   /** Модель для диалога: { adapter, provider, model }. */
   async dialogModel() {
-    const st = await gigachat.status();
+    const st = await cachedStatus();
     if (!st.available) throw new LlmError(st.error || "GigaChat недоступен");
     return { adapter: await gigachat.adapter(st.model), provider: "gigachat", model: st.model };
   },

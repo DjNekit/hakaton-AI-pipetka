@@ -78,6 +78,11 @@ def sample_check(request, name: str):
     return JsonResponse(service.start_sample(name), status=202, **_JSON)
 
 
+@api_view(["POST"])
+def inspect_uploads(request):
+    return JsonResponse(service.inspect_uploads(_data(request).get("uploads")), **_JSON)
+
+
 # ---------------------------------------------------------------- пакеты
 
 
@@ -93,6 +98,18 @@ def packages(request):
 @api_view(["GET"])
 def package_detail(request, package_id: str):
     return JsonResponse(service.get_package(package_id), **_JSON)
+
+
+@api_view(["GET", "POST"])
+def package_checklist_review(request, package_id: str):
+    if request.method == "POST":
+        return JsonResponse(service.save_checklist_review(package_id, _data(request)), **_JSON)
+    return JsonResponse({"review": service.get_package(package_id).get("checklist_review")}, **_JSON)
+
+
+@api_view(["GET"])
+def package_locations(request, package_id: str):
+    return JsonResponse(service.package_locations(package_id), **_JSON)
 
 
 # ---------------------------------------------------------------- документы

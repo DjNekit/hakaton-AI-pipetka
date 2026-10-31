@@ -26,7 +26,22 @@ export const AI_VERDICTS = [
 ] as const
 export type AiVerdict = (typeof AI_VERDICTS)[number]
 
+export interface FindingLocation {
+  documentId: string
+  file: string
+  page: number
+  bbox: [number, number, number, number] | null
+  quote?: string
+}
+
+export interface SheetSelection extends FindingLocation {
+  rule: string
+  message: string
+  severity: 'error' | 'warning'
+}
+
 export interface AiReviewItem {
+  locations?: FindingLocation[]
   id: string
   section: string
   title: string
@@ -36,7 +51,24 @@ export interface AiReviewItem {
   comment: string
 }
 
+export interface ChecklistAssistantReview {
+  state: 'queued' | 'running' | 'done' | 'failed'
+  model?: string
+  used?: boolean
+  completed: number
+  total: number
+  error?: string
+  items: Array<{
+    id: string
+    title?: string
+    explanation: string
+    suggestion: string
+    citations: Array<{ documentId: string; file: string; page: number; quote: string }>
+  }>
+}
+
 export interface AiReview {
+  assistant?: ChecklistAssistantReview
   state: 'running' | 'done' | 'failed'
   summary: string
   items: AiReviewItem[]
@@ -77,6 +109,8 @@ export interface VersionSummary {
 }
 
 export interface ApplicationVersion {
+  address: string
+  documentType: DocumentType
   files?: Array<{ name: string; index: number }>
   id: string
   version: number
@@ -92,9 +126,9 @@ export const draftFieldsSchema = z.object({
   description: z.string().trim().max(2000),
 })
 
-export const submitSchema = draftFieldsSchema.extend({
+export const submitSchema = z.object({
   versionId: z.string(),
-  address: z.string().trim().min(1).max(300),
+  description: z.string().trim().max(2000),
 })
 
 export interface ReviewItem {

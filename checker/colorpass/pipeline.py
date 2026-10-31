@@ -117,7 +117,10 @@ def run_check(
     progress: Progress = _noop,
     write_images: bool = True,
     service_type: str | None = None,
+    profile: str | None = None,
 ) -> dict:
+    if profile not in (None, "passport", "signage", "facade"):
+        raise ValueError("Тип проверки: passport, signage или facade")
     t0 = time.time()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -128,9 +131,9 @@ def run_check(
     try:
         from .signage import is_signage
 
-        if service_type:
-            return _run_supporting(doc, pdf_path, out, write_images, service_type)
-        if is_signage(doc):
+        if service_type or profile == "facade":
+            return _run_supporting(doc, pdf_path, out, write_images, service_type or "facade")
+        if profile == "signage" or (profile is None and is_signage(doc)):
             return _run_signage(doc, pdf_path, out, rules, progress, write_images, t0)
         progress("Разбор структуры паспорта", 0.15)
         passport = build_passport(doc)

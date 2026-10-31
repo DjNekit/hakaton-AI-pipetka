@@ -256,6 +256,10 @@ rules:
 
 
 package_checklists:
+  profiles:
+    passport: [intake, passport]
+    signage: [intake, signage]
+    facade: [intake, special, facade]
   source: Примеры чек-листов.xlsx
   sha256: 7bb2269d6b0eb10592972cfe9040b33bfdf2d6b15572432d8c2d8c005d45dc5f
   sheet: Лист1
@@ -1028,3 +1032,16 @@ package_evidence:
   facade-27:
     missing_data:
     - актуальные перечни 819-ПП и правоустанавливающие документы
+
+# Признаки вида документа ищутся в начале PDF, а не в его имени.
+document_identification:
+  title_pages: 3
+  title_characters: 2500
+  patterns:
+    passport:
+    - 'паспорт\s+(?:колористическ\w*\s+решени\w*|цветов\w*\s+решени\w*)'
+    signage:
+    - 'дизайн\s*[-–—]?\s*проект\s+(?:размещени\w*\s+)?(?:информационн\w*\s+конструкц\w*|вывес\w*)'
+    facade:
+    - 'проект\w*\s+(?:изменени\w*\s+)?внешн\w*\s+облик\w*'
+    - 'проект\w*\s+(?:изменени\w*|реконструкци\w*|ремонт\w*)\s+фасад\w*'

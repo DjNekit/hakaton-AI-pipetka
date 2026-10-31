@@ -12,6 +12,7 @@ import { chat, chatParamsFromRequest, toServerSentEventsResponse } from "@tansta
 import { config } from "./config.js";
 import { BackendError, backend } from "./backend.js";
 import { llm } from "./llm.js";
+import { startChecklistReview } from "./checklist-review.js";
 import { reviewPhoto, writeAdvice, writeConclusion } from "./tasks.js";
 import { systemPrompt } from "./prompt.js";
 
@@ -19,6 +20,13 @@ const ID = /^[0-9a-f]{12}$/;
 const app = new Hono();
 
 app.get("/chat/health", async (c) => c.json({ ok: true, llm: await llm.status() }));
+
+app.post("/chat/packages/:id/checklist", async c => {
+  const id = c.req.param("id");
+  if (!ID.test(id)) return c.json({ error: "Неверный id пакета" }, 400);
+  const retry = new URL(c.req.url).searchParams.get("retry") === "1";
+  return c.json({ review: await startChecklistReview(id, retry) }, 202);
+});
 
 app.post("/chat/checks/:id", async (c) => {
   const checkId = c.req.param("id");

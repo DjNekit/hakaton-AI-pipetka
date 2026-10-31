@@ -8,6 +8,8 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
+import yaml
+
 
 def main() -> None:
     source = Path(sys.argv[1])
@@ -41,6 +43,7 @@ def main() -> None:
              "options": [s.strip() for s in rows[i].get("F", "").split("□") if s.strip()]}
             for i in range(start, end + 1)]
     content = target.read_text(encoding="utf-8")
+    data["profiles"] = yaml.safe_load(content)["package_checklists"]["profiles"]
     original = content.split("\npackage_checklists:", 1)[0]
     settings = "\npackage_evidence:" + content.split("\npackage_evidence:", 1)[1] if "\npackage_evidence:" in content else ""
     # JSON — подмножество YAML; исходные тексты сохраняются без переформулировок.

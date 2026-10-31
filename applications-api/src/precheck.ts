@@ -1,3 +1,5 @@
+import type { ChecklistAssistantReview, DocumentType, FindingLocation } from './model'
+
 const BACKEND_URL = (process.env.BACKEND_URL ?? 'http://backend:8000').replace(
   /\/+$/,
   '',
@@ -31,7 +33,7 @@ async function upstream<T>(url: string, init?: RequestInit): Promise<T> {
   return body
 }
 
-export async function startCheck(files: File[], documentType: string) {
+export async function startCheck(files: File[]) {
   const form = new FormData()
   for (const file of files) form.append('files', file, file.name)
   const { uploads } = await upstream<{
@@ -39,12 +41,19 @@ export async function startCheck(files: File[], documentType: string) {
   }>(`${FILES_URL}/uploads`, { method: 'POST', body: form })
   const pdfs = uploads.filter(upload => upload.kind === 'pdf')
   if (pdfs.length !== files.length) throw new UpstreamError(400, 'invalid_file')
+  const metadata = await upstream<{ documentType: DocumentType; address: string; error?: string }>(
+    `${BACKEND_URL}/api/uploads/inspect`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ uploads: pdfs.map(upload => upload.id) }),
+    },
+  )
+  if (metadata.error) throw new UpstreamError(422, metadata.error)
   const pkg = await upstream<{ id: string }>(`${BACKEND_URL}/api/packages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ uploads: pdfs, title: files[0].name, service_type: documentType }),
+    body: JSON.stringify({ uploads: pdfs, title: files[0].name, service_type: metadata.documentType }),
   })
-  return pkg.id
+  return { packageId: pkg.id, documentType: metadata.documentType, address: metadata.address }
 }
 
 interface PackageDocument {
@@ -61,6 +70,7 @@ interface CheckFinding {
   severity: string
   message: string
   page: number | null
+  bbox?: [number, number, number, number] | null
   expected?: string | null
   actual?: string | null
 }
@@ -83,10 +93,12 @@ interface CheckRun {
 }
 
 export interface CheckResult {
+  checklist: Array<CheckResult['findings'][number] & { status: string }>
   checkId: string
   documentKind: 'passport' | 'signage'
   verdict: string
   findings: Array<{
+    locations: FindingLocation[]
     rule: string
     title: string
     ref: string
@@ -126,10 +138,12 @@ export async function readCheck(packageId: string): Promise<CheckStatus> {
   )))
   const run = runs[0]
   if (runs.some(run => !run.report)) throw new UpstreamError(502, 'checker_result_missing')
+  const { locations } = await readLocations(packageId).catch(() => ({ locations: {} as Record<string, FindingLocation[]> }))
   const findings = runs.flatMap(run => run.report?.findings ?? [])
   const documentFindings = findings
     .filter(f => f.severity === 'error' || f.severity === 'warning')
     .map(f => ({
+      locations: locations[f.rule] ?? [],
       rule: f.rule, title: f.title ?? f.rule, ref: f.ref ?? '',
       severity: f.severity as 'error' | 'warning', message: f.message,
       page: typeof f.page === 'number' ? f.page + 1 : null,
@@ -138,6 +152,7 @@ export async function readCheck(packageId: string): Promise<CheckStatus> {
   const packageFindings = pkg.checks
     .filter(check => check.status === 'fail' || check.status === 'warn')
     .map(check => ({
+      locations: locations[check.rule] ?? [],
       rule: check.rule, title: check.title, ref: check.ref ?? '',
       severity: (check.status === 'fail' ? 'error' : 'warning') as 'error' | 'warning',
       message: [check.title, check.note, ...(check.evidence ?? []).map(e =>
@@ -152,6 +167,12 @@ export async function readCheck(packageId: string): Promise<CheckStatus> {
   return {
     ...base,
     result: {
+      checklist: pkg.checks.map(check => ({
+        rule: check.rule, title: check.title, ref: check.ref ?? '', status: check.status,
+        severity: check.status === 'fail' ? 'error' as const : 'warning' as const,
+        message: check.note ?? check.title, page: null, expected: null, actual: null,
+        locations: locations[check.rule] ?? [],
+      })),
       checkId: document.id,
       documentKind:
         run.report?.document_kind === 'signage' ? 'signage' : 'passport',
@@ -166,4 +187,17 @@ export function adviceFor(checkId: string) {
     `${CHAT_URL}/chat/checks/${checkId}/advice`,
     { method: 'POST' },
   )
+}
+
+export async function checklistAssistant(packageId: string, retry = false) {
+  const response = await fetch(`${CHAT_URL}/chat/packages/${encodeURIComponent(packageId)}/checklist${retry ? '?retry=1' : ''}`, {
+    method: 'POST', signal: AbortSignal.timeout(15000),
+  }).catch(() => null)
+  if (!response) throw new UpstreamError(503, 'assistant_unavailable')
+  if (!response.ok) throw new UpstreamError(response.status >= 500 ? 503 : response.status, 'assistant_unavailable')
+  return response.json() as Promise<{ review: ChecklistAssistantReview }>
+}
+
+export function readLocations(packageId: string) {
+  return upstream<{ locations: Record<string, FindingLocation[]> }>(`${BACKEND_URL}/api/packages/${packageId}/locations`)
 }

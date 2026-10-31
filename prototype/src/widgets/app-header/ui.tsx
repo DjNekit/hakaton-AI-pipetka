@@ -1,10 +1,39 @@
 import { Link, useRouter } from '@tanstack/react-router'
 
+import { apiUrl, requestJson } from '@/shared/api'
+import { useQuery } from '@/shared/query'
+
 import type { Role } from '@/entities/auth'
 import { useSignOut } from '@/features/auth/sign-out'
 import { useTranslation } from '@/shared/i18n'
 import { Button } from '@/shared/ui/components/button'
 import { SpinnerAddon } from '@/shared/ui/components/spinner-addon'
+
+function GigaChatStatus() {
+  const status = useQuery({
+    queryKey: ['gigachat-status'],
+    queryFn: ({ signal }) => requestJson<{ available: boolean; model: string | null; message: string }>(
+      apiUrl('/chat/health'), { signal },
+    ),
+    refetchInterval: 30000,
+    staleTime: 15000,
+    retry: false,
+  })
+  const checking = status.isPending
+  const connected = !status.isError && status.data?.available === true
+  const label = checking ? 'Проверка связи' : connected ? 'Подключён' : 'Недоступен'
+  const detail = status.isError ? 'Не удалось проверить подключение к GigaChat'
+    : status.data?.message ?? 'Проверяем подключение к GigaChat'
+  return (
+    <span role="status" aria-live="polite"
+      title={[detail, status.data?.model].filter(Boolean).join(' · ')}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs whitespace-nowrap">
+      <span aria-hidden="true" className={`size-1.5 rounded-full ${checking ? 'animate-pulse bg-amber-500' : connected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+      <span className="font-medium">GigaChat</span>
+      <span className="text-muted-foreground">· {label}</span>
+    </span>
+  )
+}
 
 export interface AppNavItem {
   to: string
@@ -45,10 +74,11 @@ export function AppHeader({
           </Link>
         ))}
       </nav>
-      <div className="ml-auto flex shrink-0 items-center gap-3">
+      <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <GigaChatStatus />
         <a
           href="/"
-          className="text-sm whitespace-nowrap text-muted-foreground hover:text-foreground"
+          className="hidden text-sm whitespace-nowrap text-muted-foreground hover:text-foreground xl:inline"
           title="Прежний интерфейс проверки пакетов документов"
         >
           Старый интерфейс
