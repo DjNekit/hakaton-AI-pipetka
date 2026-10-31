@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { formatTime, runStatus } from "../format.js";
+import { VERDICT, formatTime } from "../format.js";
 
 export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
   const inputRef = useRef(null);
@@ -9,9 +9,6 @@ export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
     const f = files && files[0];
     if (f) onUpload(f);
   };
-
-  const active = runs.filter((r) => !r.archived_at);
-  const archived = runs.filter((r) => r.archived_at);
 
   return (
     <aside className="sidebar" aria-label="Проверки">
@@ -47,48 +44,31 @@ export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
         </div>
       </section>
 
-      {active.length > 0 && (
+      {runs.length > 0 && (
         <section className="side-block">
           <h2 className="side-title">Журнал проверок</h2>
-          <RunList runs={active} currentId={currentId} onOpen={onOpen} />
-        </section>
-      )}
-
-      {archived.length > 0 && (
-        <section className="side-block">
-          <h2 className="side-title">Архив</h2>
-          <RunList runs={archived} currentId={currentId} onOpen={onOpen} />
+          <ul className="run-list">
+            {runs.slice(0, 30).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  className={`run${r.id === currentId ? " is-current" : ""}`}
+                  onClick={() => onOpen(r.id)}
+                  aria-current={r.id === currentId ? "page" : undefined}
+                >
+                  <span className={`run-mark tone-${r.state === "done" ? VERDICT[r.verdict]?.tone : r.state === "error" ? "error" : "muted"}`} aria-hidden="true" />
+                  <span className="run-file">{r.file}</span>
+                  <span className="run-meta">
+                    {r.state === "done" ? VERDICT[r.verdict]?.short : r.state === "error" ? "ошибка" : "идёт проверка"}
+                    {r.state === "done" && r.llm_used ? ", с моделью" : ""}
+                    <time>{formatTime(r.created_at)}</time>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
     </aside>
-  );
-}
-
-function RunList({ runs, currentId, onOpen }) {
-  return (
-    <ul className="run-list">
-      {runs.slice(0, 30).map((r) => {
-        const status = runStatus(r);
-        return (
-          <li key={r.id}>
-            <button
-              type="button"
-              className={`run${r.id === currentId ? " is-current" : ""}`}
-              onClick={() => onOpen(r.id)}
-              aria-current={r.id === currentId ? "page" : undefined}
-              title={status.label}
-            >
-              <span className={`run-mark tone-${status.tone}`} aria-hidden="true" />
-              <span className="run-file">{r.file}</span>
-              <span className="run-meta">
-                {status.label}
-                {r.state === "done" && r.llm_used ? ", с моделью" : ""}
-                <time>{formatTime(r.created_at)}</time>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
