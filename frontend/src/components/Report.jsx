@@ -70,24 +70,13 @@ export default function Report({ run, modelOn, onUpdate }) {
     }
   };
 
-  // Что чат может сделать в отчёте (клиентские инструменты модели). Возвращают false, если показать нечего.
+  // Ссылки на замечания в ответах чата (F001) показывают замечание на листе.
   const chatHandlers = {
     showFinding: (id) => {
       const f = findings.find((x) => x.id.toLowerCase() === String(id).trim().toLowerCase());
       if (!f) return false;
       select(f);
       setTab("findings");
-      return true;
-    },
-    showPage: (index) => {
-      if (!report.pages.some((p) => p.index === index)) return false;
-      setPage(index);
-      setTab("sheets");
-      return true;
-    },
-    openTab: (key) => {
-      if (!tabs.some(([k]) => k === key)) return false;
-      setTab(key);
       return true;
     },
   };

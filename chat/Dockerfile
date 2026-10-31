@@ -1,8 +1,8 @@
-# Сервис chat (TanStack AI): все обращения к языковым моделям — LM Studio и запасной GigaChat API.
+# Сервис chat (TanStack AI): все обращения к языковой модели — GigaChat API.
 FROM node:22-alpine
 WORKDIR /app
 # Сертификаты НУЦ Минцифры — без них Node не примет TLS-сертификат GigaChat API. Если gu-st.ru недоступен
-# при сборке, образ всё равно собирается (GigaChat тогда не подключится, LM Studio работает).
+# при сборке, образ всё равно собирается (GigaChat тогда не подключится, проверка по правилам работает).
 RUN mkdir -p /app/certs && node -e "\
   const names = ['russian_trusted_root_ca_pem', 'russian_trusted_sub_ca_pem'];\
   Promise.all(names.map((n) => fetch('https://gu-st.ru/content/lending/' + n + '.crt', { signal: AbortSignal.timeout(30000) }).then((r) => r.text())))\

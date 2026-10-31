@@ -1,7 +1,7 @@
 // Разовые задачи модели. Принцип прежний: модель только формулирует текст и описывает увиденное,
 // вердикт и замечания считает код бэкенда. Результат сохраняется в бэкенд через его API.
 import { backend } from "./backend.js";
-import { parseJson, router } from "./llm.js";
+import { llm, parseJson } from "./llm.js";
 
 // ---------------------------------------------------------------- заключение
 
@@ -29,7 +29,7 @@ export async function writeConclusion(checkId) {
     }));
   const user =
     "Сведения о документе:\n" + JSON.stringify(r.summary, null, 1) + "\n\nЗамечания автоматической проверки:\n" + JSON.stringify(compact, null, 1);
-  const { text, provider, model } = await router.complete({ system: CONCLUSION_SYSTEM, user, maxTokens: 1500 });
+  const { text, provider, model } = await llm.complete({ system: CONCLUSION_SYSTEM, user, maxTokens: 1500 });
   return backend.saveConclusion(checkId, { text, provider, model });
 }
 
@@ -91,7 +91,7 @@ export async function reviewPhoto(checkId, cid) {
     "\n\nПроверь их по изображениям и добавь отличия, которые программа по цвету не находит " +
     "(вывески, навесное оборудование, изменённые проёмы). summary — 2–4 предложения для инспектора.";
   try {
-    const { text, provider, model } = await router.complete({ system: PHOTO_SYSTEM, user, images, schema: PHOTO_SCHEMA, maxTokens: 1500 });
+    const { text, provider, model } = await llm.complete({ system: PHOTO_SYSTEM, user, images, schema: PHOTO_SCHEMA, maxTokens: 1500 });
     return backend.saveReview(checkId, cid, { review: parseJson(text), provider, model });
   } catch (err) {
     if (err.status) throw err; // ошибка бэкенда — не модели

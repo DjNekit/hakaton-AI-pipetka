@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Hackathon MVP «Колорпаспорт»: checks facade-color passports and sign design projects against Moscow regulations, compares facade drawings with photos. Services: Django backend (API, PostgreSQL), processor (PDF/files, Redis queue workers), chat (LLMs, TanStack AI), React/Vite frontend; Docker Compose.
+Hackathon MVP «Колорпаспорт»: checks facade-color passports and sign design projects against Moscow regulations, compares facade drawings with photos. Services: Django backend (API, PostgreSQL), processor (PDF/files, Redis queue workers), chat (GigaChat API, TanStack AI), React/Vite frontend; Docker Compose.
 
 ## Run and verify
 
@@ -14,7 +14,7 @@ docker compose exec processor python -m colorpass check ../dataset/real/<file>.p
 docker compose exec processor python -m colorpass eval
 docker compose exec processor python -m colorpass eval ../dataset/signs
 docker compose exec processor python -m colorpass eval-photos
-curl localhost:3000/chat/health    # which LLM answers (LM Studio or GigaChat)
+curl localhost:3000/chat/health    # is GigaChat available
 ```
 
 Frontend only: `cd frontend && npm ci && npm run dev` (or `npm run build`). There is no lint, typecheck, or test script.
@@ -29,7 +29,7 @@ Frontend only: `cd frontend && npm ci && npm run dev` (or `npm run build`). Ther
 - When adding an endpoint: backend `api/urls.py` + `api/views.py` + `core/service.py`; if it needs files, a processor RPC handler in `worker/jobs.py`; update `frontend/src/api.js`.
 - Frontend URLs: `/api` → backend, `/files` → processor (uploads, page images, Excel), `/chat` → chat (Caddy in prod, Vite proxy in dev).
 - Rules, thresholds, and requirement texts belong in `processor/colorpass/data/rules.yaml`, not in Python or JS.
-- LLMs live only in `chat/` (LM Studio primary, GigaChat fallback). Code decides pass/fail from rules; models only draft text and describe photos, and chat saves results through backend API. Preserve this invariant.
+- The only LLM is GigaChat API, used only from `chat/` (no local models). Chat has no tool calling: check data goes into the system prompt. Code decides pass/fail from rules; models only draft text and describe photos, and chat saves results through backend API. Preserve this invariant.
 
 ## Conventions
 

@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
-import { TOOL_LABELS, makeClientTools } from "../chat/tools.js";
 
 const CHAT_BASE = "/chat";
 
 /**
- * Чат по отчёту: сервис chat/ (TanStack AI) отвечает, сам берёт данные проверки из основного бэкенда,
- * а показать замечание, лист или вкладку просит браузер — через клиентские инструменты.
- * handlers: { showFinding(id), showPage(index), openTab(tab) }, ui: { tab, selected, page } — что сейчас на экране.
+ * Чат по отчёту: сервис chat/ (TanStack AI, GigaChat API) отвечает по данным проверки из основного бэкенда.
+ * id замечаний в ответе (F001) — ссылки: нажатие показывает замечание на листе.
+ * handlers: { showFinding(id) }, ui: { tab, selected, page } — что сейчас на экране (уходит модели как контекст).
  */
 export default function ChatPanel({ run, handlers, ui, onClose }) {
   const handlersRef = useRef(handlers);
@@ -15,12 +14,11 @@ export default function ChatPanel({ run, handlers, ui, onClose }) {
   const uiRef = useRef(ui);
   uiRef.current = ui;
 
-  const tools = useMemo(() => makeClientTools(handlersRef), []);
   const connection = useMemo(
     () => fetchServerSentEvents(`${CHAT_BASE}/checks/${run.id}`, () => ({ body: { ui: uiRef.current } })),
     [run.id],
   );
-  const { messages, sendMessage, isLoading, stop, error } = useChat({ connection, tools, threadId: `check-${run.id}` });
+  const { messages, sendMessage, isLoading, stop, error } = useChat({ connection, threadId: `check-${run.id}` });
 
   const [input, setInput] = useState("");
   const [health, setHealth] = useState(null);
@@ -125,9 +123,6 @@ export default function ChatPanel({ run, handlers, ui, onClose }) {
 
 function Part({ part, onFinding }) {
   if (part.type === "text") return <Text content={part.content} onFinding={onFinding} />;
-  if (part.type === "tool-call") {
-    return <div className="chat-tool">{TOOL_LABELS[part.name] || part.name}</div>;
-  }
   return null;
 }
 

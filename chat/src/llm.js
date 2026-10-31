@@ -1,13 +1,10 @@
-// Языковые модели: LM Studio (основная, OpenAI-совместимый API) и GigaChat API (запасная).
-// Router выбирает доступную модель; разовые задачи (заключение, описание фото) идут через complete(),
+// Языковая модель сервиса — GigaChat API (Сбер). Разовые задачи (заключение, описание фото) идут через complete(),
 // диалог — через TanStack AI (dialogModel() отдаёт адаптер для chat()).
 import { randomUUID } from "node:crypto";
 import { openaiCompatible } from "@tanstack/ai-openai/compatible";
 import { config } from "./config.js";
 
 export class LlmError extends Error {}
-
-const NGROK_HEADERS = { "ngrok-skip-browser-warning": "1" }; // бесплатный ngrok иначе может отдать HTML-предупреждение
 
 async function readJson(res, what) {
   const text = await res.text();
@@ -29,75 +26,6 @@ export function parseJson(text) {
     const m = t.match(/\{[\s\S]*\}/);
     if (!m) throw new LlmError(`Ответ модели не JSON: ${t.slice(0, 200)}`);
     return JSON.parse(m[0]);
-  }
-}
-
-// ---------------------------------------------------------------- LM Studio
-
-export class LocalLlm {
-  provider = "local";
-
-  constructor({ url, model, key }) {
-    this.url = url;
-    this.model = model || null;
-    this.key = key || "lm-studio";
-  }
-
-  headers() {
-    return { "Content-Type": "application/json", Authorization: `Bearer ${this.key}`, ...NGROK_HEADERS };
-  }
-
-  async status() {
-    const base = { provider: "local", url: this.url || null };
-    if (!this.url) return { ...base, available: false, model: null, error: "Не задан LOCAL_LLM_URL" };
-    try {
-      const res = await fetch(`${this.url}/models`, { headers: this.headers(), signal: AbortSignal.timeout(5000) });
-      const data = await readJson(res, "LM Studio");
-      const models = (data.data || []).map((m) => m.id).filter((id) => id && !/embed/i.test(id));
-      const model = this.model || models[0] || null;
-      if (!model) return { ...base, available: false, model: null, error: "В LM Studio нет загруженной модели" };
-      return { ...base, available: true, model, models };
-    } catch (err) {
-      return { ...base, available: false, model: null, error: `LM Studio недоступна (${this.url}): ${err.message}` };
-    }
-  }
-
-  async complete({ system, user, images = [], schema = null, maxTokens = 2000, model }) {
-    const content = images.length
-      ? [{ type: "text", text: user }, ...images.map((b64) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } }))]
-      : user;
-    const payload = {
-      model: model || this.model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content },
-      ],
-      temperature: 0,
-      max_tokens: maxTokens,
-    };
-    if (schema) payload.response_format = { type: "json_schema", json_schema: { name: "result", strict: true, schema } };
-    const post = (body) =>
-      fetch(`${this.url}/chat/completions`, {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(config.timeoutMs),
-      });
-    let res = await post(payload);
-    if (res.status === 400 && payload.response_format) {
-      delete payload.response_format; // сервер не понимает structured output — схема остаётся в промпте
-      payload.messages[0].content += `\n\nОтвет — только JSON-объект по схеме:\n${JSON.stringify(schema)}`;
-      res = await post(payload);
-    }
-    const data = await readJson(res, "LM Studio");
-    const text = (data.choices?.[0]?.message?.content || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-    if (!text) throw new LlmError("LM Studio вернула пустой ответ");
-    return text;
-  }
-
-  /** Адаптер TanStack AI для диалога. */
-  adapter(model) {
-    return openaiCompatible({ name: "lmstudio", baseURL: this.url, apiKey: this.key, models: [model], defaultHeaders: NGROK_HEADERS })(model);
   }
 }
 
@@ -203,62 +131,36 @@ export class GigaChat {
     }
   }
 
-  /** Адаптер TanStack AI для диалога: у GigaChat свой формат вызова функций, поэтому диалог — без инструментов. */
+  /** Адаптер TanStack AI для диалога (OpenAI-совместимый чат GigaChat). У GigaChat свой формат вызова функций,
+   *  поэтому диалог — без инструментов: данные проверки передаются в системном промпте. */
   async adapter(model) {
     const token = await this.token();
     return openaiCompatible({ name: "gigachat", baseURL: this.baseUrl, apiKey: token, models: [model] })(model);
   }
 }
 
-// ---------------------------------------------------------------- выбор модели
+// ---------------------------------------------------------------- модель сервиса
 
-export class Router {
-  constructor() {
-    this.local = new LocalLlm(config.local);
-    this.gigachat = new GigaChat(config.gigachat);
-  }
+const gigachat = new GigaChat(config.gigachat);
 
-  /** Активная модель и состояние обеих: сначала LM Studio, иначе GigaChat. */
+export const llm = {
+  /** Доступна ли модель: { available, provider, model, error }. */
   async status() {
-    const local = await this.local.status();
-    const giga = local.available ? null : await this.gigachat.status();
-    const active = local.available ? local : giga;
-    const brief = (s) => s && { available: s.available, model: s.model, error: s.error ?? null, url: s.url };
-    return {
-      available: active.available,
-      provider: active.available ? active.provider : null,
-      model: active.available ? active.model : null,
-      error: active.available ? null : [local.error, giga?.error].filter(Boolean).join("; "),
-      local: brief(local),
-      gigachat: brief(giga),
-    };
-  }
+    const st = await gigachat.status();
+    return { available: st.available, provider: "gigachat", model: st.model, error: st.error ?? null };
+  },
 
-  /** Разовая задача: LM Studio, при сбое — GigaChat. Возвращает { text, provider, model }. */
+  /** Разовая задача → { text, provider, model }. */
   async complete(task) {
-    const errors = [];
-    const local = await this.local.status();
-    if (local.available) {
-      try {
-        return { text: await this.local.complete({ ...task, model: local.model }), provider: "local", model: local.model };
-      } catch (err) {
-        errors.push(err.message);
-        console.warn("chat: LM Studio не ответила, пробую GigaChat:", err.message);
-      }
-    } else errors.push(local.error);
-    const giga = await this.gigachat.status();
-    if (!giga.available) throw new LlmError([...errors, giga.error].filter(Boolean).join("; "));
-    return { text: await this.gigachat.complete({ ...task, model: giga.model }), provider: "gigachat", model: giga.model };
-  }
+    const st = await gigachat.status();
+    if (!st.available) throw new LlmError(st.error || "GigaChat недоступен");
+    return { text: await gigachat.complete({ ...task, model: st.model }), provider: "gigachat", model: st.model };
+  },
 
-  /** Модель для диалога: { adapter, provider, model, tools } — у GigaChat инструментов нет. */
+  /** Модель для диалога: { adapter, provider, model }. */
   async dialogModel() {
-    const local = await this.local.status();
-    if (local.available) return { adapter: this.local.adapter(local.model), provider: "local", model: local.model, tools: true };
-    const giga = await this.gigachat.status();
-    if (giga.available) return { adapter: await this.gigachat.adapter(giga.model), provider: "gigachat", model: giga.model, tools: false };
-    throw new LlmError([local.error, giga.error].filter(Boolean).join("; "));
-  }
-}
-
-export const router = new Router();
+    const st = await gigachat.status();
+    if (!st.available) throw new LlmError(st.error || "GigaChat недоступен");
+    return { adapter: await gigachat.adapter(st.model), provider: "gigachat", model: st.model };
+  },
+};

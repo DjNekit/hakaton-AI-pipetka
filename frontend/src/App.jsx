@@ -169,13 +169,9 @@ function LlmStatus({ health: llm }) {
         Модель недоступна — проверка по правилам
       </span>
     );
-  const local = llm.provider === "local";
   return (
-    <span
-      className="llm-status llm-on"
-      title={local ? "Локальная модель в LM Studio; если она отключится — GigaChat API" : "GigaChat API (LM Studio недоступна)"}
-    >
-      <span className="dot" aria-hidden="true" /> {local ? "Локальная модель" : "GigaChat"}: {llm.model}
+    <span className="llm-status llm-on" title="GigaChat API">
+      <span className="dot" aria-hidden="true" /> GigaChat: {llm.model}
     </span>
   );
 }

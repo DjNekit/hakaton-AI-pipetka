@@ -30,7 +30,6 @@ const id = encodeURIComponent;
 export const backend = {
   check: (checkId) => get(`/checks/${id(checkId)}`),
   comparisons: (checkId) => get(`/checks/${id(checkId)}/comparisons`),
-  rules: () => get("/rules"),
   /** Файл документа (картинка листа, сравнения) — у сервиса processor, в base64 для модели. */
   fileBase64: async (checkId, rel) => {
     const res = await fetch(`${config.filesUrl}/${id(checkId)}/${rel}`, { signal: AbortSignal.timeout(30_000) });
@@ -40,13 +39,3 @@ export const backend = {
   saveConclusion: (checkId, body) => post(`/checks/${id(checkId)}/conclusion`, body),
   saveReview: (checkId, cid, body) => post(`/checks/${id(checkId)}/comparisons/${id(cid)}/review`, body),
 };
-
-// Справочник правил меняется только с кодом — кэшируем на время жизни процесса.
-let rulesCache = null;
-export async function rulesIndex() {
-  if (!rulesCache) {
-    const data = await backend.rules();
-    rulesCache = Object.fromEntries(data.rules.map((r) => [r.id, r]));
-  }
-  return rulesCache;
-}

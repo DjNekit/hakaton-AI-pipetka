@@ -1,45 +1,43 @@
-// Сервис chat — единственное место, где работают языковые модели (бэкенд к ним не обращается).
+// Сервис chat — единственное место, где работает языковая модель — GigaChat API (бэкенд к ней не обращается).
 //   POST /chat/checks/:id                              диалог по отчёту: поток AG-UI (SSE) для useChat на фронтенде
 //   POST /chat/checks/:id/conclusion                   заключение моделью → сохраняется в бэкенд, ответ — проверка
 //   POST /chat/checks/:id/comparisons/:cid/review      описание отличий на фото → сохраняется в бэкенд, ответ — сравнение
-//   GET  /chat/health                                  какая модель отвечает: LM Studio или запасной GigaChat
+//   GET  /chat/health                                  доступен ли GigaChat
 // Данные проверок — из основного бэкенда (BACKEND_URL).
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { chat, chatParamsFromRequest, maxIterations, toServerSentEventsResponse } from "@tanstack/ai";
+import { chat, chatParamsFromRequest, toServerSentEventsResponse } from "@tanstack/ai";
 import { config } from "./config.js";
-import { BackendError } from "./backend.js";
-import { router } from "./llm.js";
+import { BackendError, backend } from "./backend.js";
+import { llm } from "./llm.js";
 import { reviewPhoto, writeConclusion } from "./tasks.js";
-import { clientToolDefs, makeCheckLoader, serverTools } from "./tools.js";
 import { systemPrompt } from "./prompt.js";
 
 const ID = /^[0-9a-f]{12}$/;
 const app = new Hono();
 
-app.get("/chat/health", async (c) => c.json({ ok: true, llm: await router.status() }));
+app.get("/chat/health", async (c) => c.json({ ok: true, llm: await llm.status() }));
 
 app.post("/chat/checks/:id", async (c) => {
   const checkId = c.req.param("id");
   if (!ID.test(checkId)) return c.json({ error: "Неверный id проверки" }, 400);
 
-  const loadCheck = makeCheckLoader(checkId);
-  const run = await loadCheck();
-  const llm = await router.dialogModel();
+  const run = await backend.check(checkId);
+  if (run.state !== "done" || !run.report) return c.json({ error: "Проверка документа ещё не завершена" }, 409);
+  const model = await llm.dialogModel();
 
   const { messages, threadId, runId, forwardedProps } = await chatParamsFromRequest(c.req.raw);
   const abortController = new AbortController();
   c.req.raw.signal?.addEventListener("abort", () => abortController.abort());
 
   const stream = chat({
-    adapter: llm.adapter,
+    adapter: model.adapter,
     messages,
     threadId,
     runId,
-    systemPrompts: [systemPrompt(run, forwardedProps?.ui, llm.tools)],
-    ...(llm.tools ? { tools: [...serverTools(loadCheck, checkId), ...clientToolDefs], agentLoopStrategy: maxIterations(config.maxSteps) } : {}),
+    systemPrompts: [systemPrompt(run, forwardedProps?.ui)],
     modelOptions: { temperature: 0.2 },
-    metadata: { provider: llm.provider, model: llm.model, checkId },
+    metadata: { provider: model.provider, model: model.model, checkId },
     abortController,
   });
   return toServerSentEventsResponse(stream);
@@ -65,7 +63,6 @@ app.onError((err, c) => {
 
 serve({ fetch: app.fetch, port: config.port }, () => {
   console.log(
-    `chat: :${config.port}; бэкенд ${config.backendUrl}; LM Studio ${config.local.url || "не задана"} ${config.local.model}; ` +
-      `GigaChat ${config.gigachat.key ? config.gigachat.model : "без ключа"}`,
+    `chat: :${config.port}; бэкенд ${config.backendUrl}; GigaChat ${config.gigachat.key ? config.gigachat.model : "без ключа"}`,
   );
 });

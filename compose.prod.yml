@@ -55,16 +55,13 @@ services:
     depends_on:
       redis: { condition: service_healthy }
 
-  chat:                             # языковые модели (TanStack AI): чат, заключение, описание фото
+  chat:                             # языковая модель GigaChat (TanStack AI): чат, заключение, описание фото
     build: ./chat
     restart: always
     environment:
       BACKEND_URL: http://backend:8000
       FILES_URL: http://processor:8001/files
-      # основная модель — LM Studio на ноутбуке через ngrok; не отвечает — GigaChat API; нет обеих — ИИ-функции недоступны, правила работают
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
+      # языковая модель — GigaChat API; без ключа ИИ-функции недоступны, проверка по правилам работает
       GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
       GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
       GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
