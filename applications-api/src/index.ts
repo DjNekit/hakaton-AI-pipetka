@@ -7,6 +7,7 @@
 //   GET /new/api/dev/mailbox/:email     последнее «письмо» (коды, ссылки) — только вне продакшена
 //   GET /new/api/health
 import { serve } from '@hono/node-server'
+import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
 
 import { runAiReview } from './ai-review'
@@ -136,6 +137,17 @@ app.get('/dev/mailbox/:email', c => {
   const message = readMailbox(c.req.param('email'))
   return message ? c.json(message) : c.json({ error: 'empty' }, 404)
 })
+
+// Схема better-auth (в том числе своё поле user.role) — как `auth migrate`, но при каждом старте:
+// недостающие таблицы и столбцы создаются, существующие данные не трогаются.
+const migrations = await getMigrations(auth.options)
+if (migrations.toBeCreated.length || migrations.toBeAdded.length) {
+  await migrations.runMigrations()
+  console.log(
+    `applications-api: схема better-auth обновлена — таблицы: ${migrations.toBeCreated.map(t => t.table).join(', ') || '—'}, ` +
+      `столбцы: ${migrations.toBeAdded.flatMap(t => Object.keys(t.fields).map(f => `${t.table}.${f}`)).join(', ') || '—'}`,
+  )
+}
 
 const port = Number(process.env.PORT ?? 3100)
 serve({ fetch: app.fetch, port }, () => {

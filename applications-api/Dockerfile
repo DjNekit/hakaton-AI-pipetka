@@ -5,7 +5,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 COPY src ./src
-COPY migrations ./migrations
 ENV NODE_ENV=production PORT=3100 AUTH_DB_PATH=/data/auth.db UPLOADS_DIR=/data/uploads
 VOLUME /data
 EXPOSE 3100
