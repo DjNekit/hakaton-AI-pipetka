@@ -106,6 +106,7 @@ services:
       BETTER_AUTH_SECRET: ${PROTOTYPE_AUTH_SECRET:-dev-prototype-secret-change-me-0123456789}
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
       NORMCONTROL_EMAILS: ${NORMCONTROL_EMAILS:-}
+      SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-1}
       CHAT_URL: http://chat:3000
       BACKEND_URL: http://backend:8000
       FILES_URL: http://checker:8001/files

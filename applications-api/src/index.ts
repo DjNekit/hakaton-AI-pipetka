@@ -18,6 +18,7 @@
 import { serve } from '@hono/node-server'
 import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
+import { seedDemoAccounts } from './seed-accounts'
 import { chatStatus } from './chat-status'
 import { readSheets, readSheetImage } from './sheets'
 import { streamSSE } from 'hono/streaming'
@@ -428,6 +429,8 @@ if (migrations.toBeCreated.length || migrations.toBeAdded.length) {
       `столбцы: ${migrations.toBeAdded.flatMap(t => Object.keys(t.fields).map(f => `${t.table}.${f}`)).join(', ') || '—'}`,
   )
 }
+
+await seedDemoAccounts()
 
 const port = Number(process.env.PORT ?? 3100)
 for (const application of listApplications()) {
