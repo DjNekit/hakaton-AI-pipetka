@@ -1,6 +1,5 @@
 import { betterAuth } from 'better-auth'
 import { emailOTP } from 'better-auth/plugins'
-import { tanstackStartCookies } from 'better-auth/tanstack-start'
 
 import { createDb } from './auth-db'
 import { deliver } from './mailbox'
@@ -25,8 +24,12 @@ function baseURL() {
   }
 }
 
+// Клиент живёт на /new, API — на /new/api: адреса авторизации — /new/api/auth/*
+export const AUTH_BASE_PATH = '/new/api/auth'
+
 export const auth = betterAuth({
   baseURL: baseURL(),
+  basePath: AUTH_BASE_PATH,
   database: createDb(),
   user: {
     additionalFields: {
@@ -80,6 +83,5 @@ export const auth = betterAuth({
         console.log(`[auth] ${type} OTP for ${email}: ${otp}`)
       },
     }),
-    tanstackStartCookies(),
   ],
 })

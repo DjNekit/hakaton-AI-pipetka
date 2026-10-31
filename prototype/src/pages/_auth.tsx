@@ -14,8 +14,11 @@ export const Route = createFileRoute('/_auth')({
 
 function RouteComponent() {
   return (
-    <main className="flex min-h-svh items-center justify-center">
+    <main className="flex min-h-svh flex-col items-center justify-center gap-6">
       <Outlet />
+      <a href="/" className="text-sm text-muted-foreground hover:text-foreground">
+        Старый интерфейс
+      </a>
     </main>
   )
 }

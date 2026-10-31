@@ -1,0 +1,24 @@
+{
+  "name": "colorpass-prototype-api",
+  "private": true,
+  "type": "module",
+  "description": "Серверная логика нового интерфейса (/new): авторизация, заявки, проверка, ассистент",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "better-auth": "^1.7.14",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.6.14",
+    "tsx": "^4.19.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.2",
+    "typescript": "^6.0.2"
+  }
+}

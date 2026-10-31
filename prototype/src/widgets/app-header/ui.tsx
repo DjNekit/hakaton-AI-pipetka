@@ -46,6 +46,13 @@ export function AppHeader({
         ))}
       </nav>
       <div className="ml-auto flex shrink-0 items-center gap-3">
+        <a
+          href="/"
+          className="text-sm whitespace-nowrap text-muted-foreground hover:text-foreground"
+          title="Прежний интерфейс проверки пакетов документов"
+        >
+          Старый интерфейс
+        </a>
         <span className="hidden truncate text-sm text-muted-foreground md:inline">
           {email}
         </span>

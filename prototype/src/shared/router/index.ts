@@ -1,24 +1,21 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
-import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 
 import { createAppQueryClient } from '@/shared/query'
 
 import { routeTree } from './routeTree.gen'
 
+// Клиент — статика (SPA) на /new; серверная часть — сервис prototype-api (/new/api).
 export function getRouter() {
   const queryClient = createAppQueryClient()
 
-  const router = createTanStackRouter({
+  return createTanStackRouter({
     routeTree,
+    basepath: '/new',
     context: { queryClient },
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
   })
-
-  setupRouterSsrQueryIntegration({ router, queryClient })
-
-  return router
 }
 
 declare module '@tanstack/react-router' {

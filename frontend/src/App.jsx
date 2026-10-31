@@ -125,6 +125,9 @@ export default function App() {
           <span className="brand-name">Колорпаспорт</span>
           <span className="brand-sub">проверка пакета документов: паспорт колористического решения, дизайн-проект вывесок, фото фасада</span>
         </a>
+        <a className="ui-switch" href="/new/" title="Новый интерфейс: заявки, роли заявителя и согласующего">
+          Новый интерфейс →
+        </a>
         <LlmStatus health={health} />
       </header>
       <div className="layout">

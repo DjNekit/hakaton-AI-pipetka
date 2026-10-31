@@ -18,7 +18,6 @@ import { Route as AuthVerifyEmailRouteImport } from './../../pages/_auth/verify-
 import { Route as AuthenticatedIndexRouteImport } from './../../pages/_authenticated/index'
 import { Route as AuthenticatedApplicantRouteRouteImport } from './../../pages/_authenticated/applicant/route'
 import { Route as AuthenticatedApproverRouteRouteImport } from './../../pages/_authenticated/approver/route'
-import { Route as ApiChatRouteImport } from './../../pages/api/chat'
 import { Route as AuthSignInIndexRouteImport } from './../../pages/_auth/sign-in/index'
 import { Route as AuthSignInCodeRouteImport } from './../../pages/_auth/sign-in/code'
 import { Route as AuthSignInPasswordRouteImport } from './../../pages/_auth/sign-in/password'
@@ -28,11 +27,6 @@ import { Route as AuthenticatedApplicantAssistantRouteImport } from './../../pag
 import { Route as AuthenticatedApplicantNewRouteImport } from './../../pages/_authenticated/applicant/new'
 import { Route as AuthenticatedApproverIndexRouteImport } from './../../pages/_authenticated/approver/index'
 import { Route as AuthenticatedApproverIdRouteImport } from './../../pages/_authenticated/approver/$id'
-import { Route as ApiApplicationsIndexRouteImport } from './../../pages/api/applications/index'
-import { Route as ApiAuthSplatRouteImport } from './../../pages/api/auth/$'
-import { Route as ApiApplicationsIdIndexRouteImport } from './../../pages/api/applications/$id/index'
-import { Route as ApiApplicationsIdFileRouteImport } from './../../pages/api/applications/$id/file'
-import { Route as ApiDevMailboxEmailRouteImport } from './../../pages/api/dev/mailbox.$email'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -79,11 +73,6 @@ const AuthenticatedApproverRouteRoute =
     path: '/approver',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthSignInIndexRoute = AuthSignInIndexRouteImport.update({
   id: '/sign-in/',
   path: '/sign-in/',
@@ -134,31 +123,6 @@ const AuthenticatedApproverIdRoute = AuthenticatedApproverIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedApproverRouteRoute,
 } as any)
-const ApiApplicationsIndexRoute = ApiApplicationsIndexRouteImport.update({
-  id: '/api/applications/',
-  path: '/api/applications/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiApplicationsIdIndexRoute = ApiApplicationsIdIndexRouteImport.update({
-  id: '/api/applications/$id/',
-  path: '/api/applications/$id/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiApplicationsIdFileRoute = ApiApplicationsIdFileRouteImport.update({
-  id: '/api/applications/$id/file',
-  path: '/api/applications/$id/file',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDevMailboxEmailRoute = ApiDevMailboxEmailRouteImport.update({
-  id: '/api/dev/mailbox/$email',
-  path: '/api/dev/mailbox/$email',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -168,21 +132,15 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof AuthResetPasswordRoute
   '/sign-up': typeof AuthSignUpRoute
   '/verify-email': typeof AuthVerifyEmailRoute
-  '/api/chat': typeof ApiChatRoute
   '/sign-in/code': typeof AuthSignInCodeRoute
   '/sign-in/password': typeof AuthSignInPasswordRoute
   '/applicant/$id': typeof AuthenticatedApplicantIdRoute
   '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/sign-in/': typeof AuthSignInIndexRoute
   '/applicant/': typeof AuthenticatedApplicantIndexRoute
   '/approver/': typeof AuthenticatedApproverIndexRoute
-  '/api/applications/': typeof ApiApplicationsIndexRoute
-  '/api/applications/$id/file': typeof ApiApplicationsIdFileRoute
-  '/api/dev/mailbox/$email': typeof ApiDevMailboxEmailRoute
-  '/api/applications/$id/': typeof ApiApplicationsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
@@ -190,21 +148,15 @@ export interface FileRoutesByTo {
   '/reset-password': typeof AuthResetPasswordRoute
   '/sign-up': typeof AuthSignUpRoute
   '/verify-email': typeof AuthVerifyEmailRoute
-  '/api/chat': typeof ApiChatRoute
   '/sign-in/code': typeof AuthSignInCodeRoute
   '/sign-in/password': typeof AuthSignInPasswordRoute
   '/applicant/$id': typeof AuthenticatedApplicantIdRoute
   '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/sign-in': typeof AuthSignInIndexRoute
   '/applicant': typeof AuthenticatedApplicantIndexRoute
   '/approver': typeof AuthenticatedApproverIndexRoute
-  '/api/applications': typeof ApiApplicationsIndexRoute
-  '/api/applications/$id/file': typeof ApiApplicationsIdFileRoute
-  '/api/dev/mailbox/$email': typeof ApiDevMailboxEmailRoute
-  '/api/applications/$id': typeof ApiApplicationsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -216,7 +168,6 @@ export interface FileRoutesById {
   '/_auth/reset-password': typeof AuthResetPasswordRoute
   '/_auth/sign-up': typeof AuthSignUpRoute
   '/_auth/verify-email': typeof AuthVerifyEmailRoute
-  '/api/chat': typeof ApiChatRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_auth/sign-in/code': typeof AuthSignInCodeRoute
   '/_auth/sign-in/password': typeof AuthSignInPasswordRoute
@@ -224,14 +175,9 @@ export interface FileRoutesById {
   '/_authenticated/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/_authenticated/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/_authenticated/approver/$id': typeof AuthenticatedApproverIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
   '/_auth/sign-in/': typeof AuthSignInIndexRoute
   '/_authenticated/applicant/': typeof AuthenticatedApplicantIndexRoute
   '/_authenticated/approver/': typeof AuthenticatedApproverIndexRoute
-  '/api/applications/': typeof ApiApplicationsIndexRoute
-  '/api/applications/$id/file': typeof ApiApplicationsIdFileRoute
-  '/api/dev/mailbox/$email': typeof ApiDevMailboxEmailRoute
-  '/api/applications/$id/': typeof ApiApplicationsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -243,21 +189,15 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-up'
     | '/verify-email'
-    | '/api/chat'
     | '/sign-in/code'
     | '/sign-in/password'
     | '/applicant/$id'
     | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
-    | '/api/auth/$'
     | '/sign-in/'
     | '/applicant/'
     | '/approver/'
-    | '/api/applications/'
-    | '/api/applications/$id/file'
-    | '/api/dev/mailbox/$email'
-    | '/api/applications/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -265,21 +205,15 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-up'
     | '/verify-email'
-    | '/api/chat'
     | '/sign-in/code'
     | '/sign-in/password'
     | '/applicant/$id'
     | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
-    | '/api/auth/$'
     | '/sign-in'
     | '/applicant'
     | '/approver'
-    | '/api/applications'
-    | '/api/applications/$id/file'
-    | '/api/dev/mailbox/$email'
-    | '/api/applications/$id'
   id:
     | '__root__'
     | '/_auth'
@@ -290,7 +224,6 @@ export interface FileRouteTypes {
     | '/_auth/reset-password'
     | '/_auth/sign-up'
     | '/_auth/verify-email'
-    | '/api/chat'
     | '/_authenticated/'
     | '/_auth/sign-in/code'
     | '/_auth/sign-in/password'
@@ -298,25 +231,14 @@ export interface FileRouteTypes {
     | '/_authenticated/applicant/assistant'
     | '/_authenticated/applicant/new'
     | '/_authenticated/approver/$id'
-    | '/api/auth/$'
     | '/_auth/sign-in/'
     | '/_authenticated/applicant/'
     | '/_authenticated/approver/'
-    | '/api/applications/'
-    | '/api/applications/$id/file'
-    | '/api/dev/mailbox/$email'
-    | '/api/applications/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  ApiChatRoute: typeof ApiChatRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiApplicationsIndexRoute: typeof ApiApplicationsIndexRoute
-  ApiApplicationsIdFileRoute: typeof ApiApplicationsIdFileRoute
-  ApiDevMailboxEmailRoute: typeof ApiDevMailboxEmailRoute
-  ApiApplicationsIdIndexRoute: typeof ApiApplicationsIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -384,13 +306,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApproverRouteRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_auth/sign-in/': {
       id: '/_auth/sign-in/'
       path: '/sign-in'
@@ -453,41 +368,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/approver/$id'
       preLoaderRoute: typeof AuthenticatedApproverIdRouteImport
       parentRoute: typeof AuthenticatedApproverRouteRoute
-    }
-    '/api/applications/': {
-      id: '/api/applications/'
-      path: '/api/applications'
-      fullPath: '/api/applications/'
-      preLoaderRoute: typeof ApiApplicationsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/applications/$id/': {
-      id: '/api/applications/$id/'
-      path: '/api/applications/$id'
-      fullPath: '/api/applications/$id/'
-      preLoaderRoute: typeof ApiApplicationsIdIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/applications/$id/file': {
-      id: '/api/applications/$id/file'
-      path: '/api/applications/$id/file'
-      fullPath: '/api/applications/$id/file'
-      preLoaderRoute: typeof ApiApplicationsIdFileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/dev/mailbox/$email': {
-      id: '/api/dev/mailbox/$email'
-      path: '/api/dev/mailbox/$email'
-      fullPath: '/api/dev/mailbox/$email'
-      preLoaderRoute: typeof ApiDevMailboxEmailRouteImport
-      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -570,22 +450,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  ApiChatRoute: ApiChatRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ApiApplicationsIndexRoute: ApiApplicationsIndexRoute,
-  ApiApplicationsIdFileRoute: ApiApplicationsIdFileRoute,
-  ApiDevMailboxEmailRoute: ApiDevMailboxEmailRoute,
-  ApiApplicationsIdIndexRoute: ApiApplicationsIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './index.ts'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

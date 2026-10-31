@@ -18,11 +18,11 @@ function RouteComponent() {
   const { t } = useTranslation()
   const { redirect } = Route.useSearch()
   const [sentTo, setSentTo] = useState<string>()
-  const origin =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : process.env.BETTER_AUTH_URL!
-  const redirectTo = new URL('/reset-password', origin)
+  // ссылка из письма ведёт на этот же клиент (/new/reset-password)
+  const redirectTo = new URL(
+    `${import.meta.env.BASE_URL}reset-password`,
+    window.location.origin,
+  )
   if (redirect) redirectTo.searchParams.set('redirect', redirect)
   const form = useForgotPasswordForm(redirectTo.toString(), {
     onSuccess: (_data, { email }) => setSentTo(email),

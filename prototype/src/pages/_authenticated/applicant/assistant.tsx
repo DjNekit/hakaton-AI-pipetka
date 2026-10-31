@@ -1,5 +1,7 @@
 import { fetchServerSentEvents, useChat } from '@tanstack/ai-react'
 import { createFileRoute } from '@tanstack/react-router'
+
+import { apiUrl } from '@/shared/api'
 import { useState } from 'react'
 
 import { useTranslation } from '@/shared/i18n'
@@ -15,7 +17,7 @@ function Assistant() {
   const [input, setInput] = useState('')
   const [threadId] = useState(() => crypto.randomUUID())
   const { messages, sendMessage, isLoading, error, stop } = useChat({
-    connection: fetchServerSentEvents('/api/chat'),
+    connection: fetchServerSentEvents(apiUrl('/chat')),
     threadId,
   })
 

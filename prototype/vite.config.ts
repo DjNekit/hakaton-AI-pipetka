@@ -1,8 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import { devtools } from '@tanstack/devtools-vite'
-import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite-plus'
 
 export default defineConfig({
@@ -31,18 +30,23 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
     ignorePatterns: ['**/*.gen.ts'],
   },
+  // Клиент — статика (SPA) на /new; серверная часть — сервис prototype-api на /new/api.
+  base: '/new/',
+  server: {
+    proxy: {
+      '/new/api': process.env.VITE_PROTOTYPE_API ?? 'http://127.0.0.1:3100',
+    },
+  },
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),
-    nitro(),
-    tailwindcss(),
-    tanstackStart({
-      router: {
-        entry: 'shared/router/index',
-        routesDirectory: 'pages',
-        generatedRouteTree: 'shared/router/routeTree.gen.ts',
-      },
+    tanstackRouter({
+      target: 'react',
+      autoCodeSplitting: true,
+      routesDirectory: './src/pages',
+      generatedRouteTree: './src/shared/router/routeTree.gen.ts',
     }),
+    tailwindcss(),
     viteReact(),
   ],
 })

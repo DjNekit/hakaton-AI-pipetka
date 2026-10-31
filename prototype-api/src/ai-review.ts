@@ -3,7 +3,7 @@ import type {
   AiReviewItem,
   AiVerdict,
   DocumentType,
-} from '@/entities/application/model'
+} from './model'
 
 import {
   getApplication,

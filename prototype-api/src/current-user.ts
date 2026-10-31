@@ -1,4 +1,4 @@
-import { toRole, type Role } from '@/entities/auth/role'
+import { toRole, type Role } from './model'
 
 import { auth } from './auth'
 

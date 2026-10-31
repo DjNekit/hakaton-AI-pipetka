@@ -1,0 +1,10 @@
+node_modules
+dist
+.output
+.nitro
+.tanstack
+Dockerfile
+.dockerignore
+.env
+*.db
+uploads

@@ -4,7 +4,7 @@ import {
   type Application,
   type ReviewData,
 } from '@/entities/application'
-import { requestJson } from '@/shared/api'
+import { apiUrl, requestJson } from '@/shared/api'
 import {
   useMutation,
   useQueryClient,
@@ -21,7 +21,7 @@ export function useUpdateApplication() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, patch }: UpdateApplicationVariables) =>
-      requestJson<Application>(`/api/applications/${id}`, {
+      requestJson<Application>(apiUrl(`/applications/${id}`), {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(patch),

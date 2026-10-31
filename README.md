@@ -55,8 +55,8 @@ API. Модель — помощник, а не судья: решения «с�
 
 | Файл | Для чего | Что запускает |
 |---|---|---|
-| `compose.yml` | локальная разработка | Django `runserver`, Vite, processor, chat (код смонтирован), Redis, PostgreSQL |
-| `compose.prod.yml` | сервер | сборка образов: gunicorn, processor, chat, Caddy (собранный фронтенд, HTTPS, прокси), Redis, PostgreSQL |
+| `compose.yml` | локальная разработка | Django `runserver`, Vite, processor, chat, новый интерфейс и его API (код смонтирован), Redis, PostgreSQL |
+| `compose.prod.yml` | сервер | сборка образов: gunicorn, processor, chat, prototype, prototype-api, Caddy (HTTPS, прокси), Redis, PostgreSQL |
 
 ### Локально
 
@@ -68,7 +68,9 @@ docker compose down                           # остановить (данны
 
 | Сервис | Что внутри | Порт |
 |---|---|---|
-| `frontend` | Vite dev server: `/api` → backend, `/files` → processor, `/chat` → chat | 5173 (`COLORPASS_PORT`) |
+| `frontend` | Vite dev server: `/api` → backend, `/files` → processor, `/chat` → chat, `/new` → prototype | 5173 (`COLORPASS_PORT`) |
+| `prototype` | новый интерфейс (Vite dev server, base `/new/`): `/new/api` → prototype-api | 5174 (`COLORPASS_PROTOTYPE_PORT`) → http://localhost:5174/new/ |
+| `prototype-api` | серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat | 127.0.0.1:3100 |
 | `backend` | Django `runserver`: API, журнал пакетов, отчёты, решения; файлов и PDF не касается | 127.0.0.1:8000 |
 | `processor` | проверка PDF (tesseract, OpenCV), листы, сравнение фото, Excel, файлы `runs/`; задачи — из Redis | 127.0.0.1:8001 |
 | `chat` | языковая модель GigaChat API: Node + TanStack AI; чат, заключение, описание фото | 127.0.0.1:3000 |
@@ -89,6 +91,24 @@ Docker на сервере ставится при первом деплое, е
 
 На сервере вручную: `cd /opt/colorpass && docker compose -f compose.prod.yml logs -f` (логи),
 `docker compose -f compose.prod.yml ps` (состояние).
+
+### Новый интерфейс: https://ai-pipetka.fun/new
+
+Рядом с прежним интерфейсом работает новый — заявки с ролями заявителя и согласующего (папка `prototype/`).
+Переключатель — в шапке обоих интерфейсов («Новый интерфейс →» и «Старый интерфейс»).
+
+- `prototype/` — клиент: React 19, TanStack Router (файловые маршруты в `src/pages`), Query, Form, shadcn/ui.
+  Собирается в статику с базой `/new/` и раздаётся своим Caddy (`prototype/Dockerfile`); общий Caddy отправляет
+  туда `/new/*`. Серверного рендеринга нет: сессию клиент получает запросом к better-auth.
+- `prototype-api/` — серверная логика, вынесенная из прототипа: Node 22 + Hono, better-auth (вход по паролю и
+  по коду, подтверждение почты, сброс пароля), заявки и PDF (SQLite + том `prototype-data`), проверка заявки
+  по чек-листу (пока демонстрационная), ассистент заявителя — через сервис `chat` (GigaChat API).
+  Адреса: `/new/api/auth/*`, `/new/api/applications`, `/new/api/applications/{id}`, `…/{id}/file`, `/new/api/chat`.
+- Роль «согласующий» получают адреса из `APPROVER_EMAILS` (переменная окружения `production` в GitHub), остальные —
+  заявители. Секрет better-auth в проде — секрет `PROTOTYPE_AUTH_SECRET` (пока его нет, используется `DJANGO_SECRET_KEY`).
+- Почта пока не отправляется: коды подтверждения и ссылки сброса пароля пишутся в лог
+  (`docker compose -f compose.prod.yml logs prototype-api`); вне продакшена последнее письмо отдаёт
+  `GET /new/api/dev/mailbox/{email}`.
 
 ### Языковая модель: GigaChat API (сервис `chat`)
 
@@ -184,6 +204,8 @@ processor/
   worker/               сервис: воркеры очереди (jobs.py), сверка пакета (package.py), файлы и загрузки
                         по HTTP (fileserver.py), раскладка runs/ (storage.py)
 frontend/               React 18 + Vite; пакет — components/PackageView.jsx, чат — components/ChatPanel.jsx
+prototype/              новый интерфейс (/new): React 19 + TanStack Router, статика
+prototype-api/          его серверная часть: Hono + better-auth + SQLite (src/index.ts — маршруты /new/api)
 chat/                   языковая модель: TanStack AI + Hono (server.js, llm.js — GigaChat API, tasks.js —
                         заключение и описание фото, prompt.js — промпт чата с данными проверки)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru

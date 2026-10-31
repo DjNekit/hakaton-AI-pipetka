@@ -2,6 +2,7 @@
 //   POST /chat/checks/:id                              диалог по отчёту: поток AG-UI (SSE) для useChat на фронтенде
 //   POST /chat/checks/:id/conclusion                   заключение моделью → сохраняется в бэкенд, ответ — проверка
 //   POST /chat/checks/:id/comparisons/:cid/review      описание отличий на фото → сохраняется в бэкенд, ответ — сравнение
+//   POST /chat/assistant                               ассистент заявителя в новом интерфейсе (/new) — вызывает prototype-api
 //   GET  /chat/health                                  доступен ли GigaChat
 // Данные проверок — из основного бэкенда (BACKEND_URL).
 import { serve } from "@hono/node-server";
@@ -38,6 +39,31 @@ app.post("/chat/checks/:id", async (c) => {
     systemPrompts: [systemPrompt(run, forwardedProps?.ui)],
     modelOptions: { temperature: 0.2 },
     metadata: { provider: model.provider, model: model.model, checkId },
+    abortController,
+  });
+  return toServerSentEventsResponse(stream);
+});
+
+const ASSISTANT_PROMPT = [
+  "Ты — ассистент заявителя в сервисе «Колорпаспорт» (Москомархитектура). Заявитель готовит и подаёт документы:",
+  "паспорт колористического решения фасадов (ПП Москвы № 114-ПП), дизайн-проект размещения вывесок (№ 902-ПП),",
+  "проект изменения внешнего облика фасада. Помогай понять требования, состав документов и типичные ошибки.",
+  "Отвечай по-русски, коротко и по делу. Не выдумывай номера пунктов НПА; если не уверен — так и скажи.",
+].join("\n");
+
+app.post("/chat/assistant", async (c) => {
+  const model = await llm.dialogModel();
+  const { messages, threadId, runId } = await chatParamsFromRequest(c.req.raw);
+  const abortController = new AbortController();
+  c.req.raw.signal?.addEventListener("abort", () => abortController.abort());
+  const stream = chat({
+    adapter: model.adapter,
+    messages,
+    threadId,
+    runId,
+    systemPrompts: [ASSISTANT_PROMPT],
+    modelOptions: { temperature: 0.3 },
+    metadata: { provider: model.provider, model: model.model, assistant: true },
     abortController,
   });
   return toServerSentEventsResponse(stream);

@@ -1,7 +1,9 @@
 # Локальная разработка: код всех сервисов смонтирован в контейнеры.
 #   docker compose up --build       → интерфейс http://localhost:5173, API http://localhost:8000/api/health
 # Сервисы:
-#   frontend   React (Vite): /api → backend, /files → processor, /chat → chat
+#   frontend   React (Vite): /api → backend, /files → processor, /chat → chat, /new → новый интерфейс
+#   prototype      новый интерфейс (TanStack Router, Vite) на /new — http://localhost:5174/new/
+#   prototype-api  серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat
 #   backend    Django: API, PostgreSQL, журнал пакетов, решения инспектора; файлов не касается
 #   processor  проверка PDF, OCR, листы, сравнение фото, Excel, хранение файлов (runs/); задачи — из очереди Redis
 #   chat       языковая модель (GigaChat API): чат по отчёту, заключение, описание фото
@@ -55,6 +57,7 @@ services:
       VITE_API_TARGET: http://backend:8000      # vite проксирует /api на backend
       VITE_FILES_TARGET: http://processor:8001  # /files — на processor (загрузка и файлы документов)
       VITE_CHAT_TARGET: http://chat:3000        # /chat — на сервис моделей
+      VITE_PROTOTYPE_TARGET: http://prototype:3000   # /new — новый интерфейс (переключатель в шапке)
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules   # зависимости — в томе, не на диске Mac
@@ -78,6 +81,37 @@ services:
     ports: ["127.0.0.1:${COLORPASS_CHAT_PORT:-3000}:3000"]
     depends_on:
       backend: { condition: service_healthy }
+
+  prototype:                    # новый интерфейс: Vite dev server, base /new/; /new/api → prototype-api
+    image: node:22-bookworm-slim
+    working_dir: /app
+    command: ["sh", "-c", "corepack enable && pnpm install && pnpm dev --host 0.0.0.0"]
+    environment:
+      VITE_PROTOTYPE_API: http://prototype-api:3100
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    volumes:
+      - ./prototype:/app
+      - prototype-node-modules:/app/node_modules   # зависимости — в томе (на Mac свои, под macOS)
+    ports: ["${COLORPASS_PROTOTYPE_PORT:-5174}:3000"]
+    depends_on:
+      - prototype-api
+
+  prototype-api:                # серверная часть нового интерфейса
+    build: ./prototype-api
+    command: ["npx", "tsx", "watch", "src/index.ts"]
+    environment:
+      NODE_ENV: development
+      BETTER_AUTH_URL: http://localhost:${COLORPASS_PROTOTYPE_PORT:-5174}
+      AUTH_ALLOWED_HOSTS: localhost:${COLORPASS_PROTOTYPE_PORT:-5174},localhost:${COLORPASS_PORT:-5173}
+      BETTER_AUTH_SECRET: ${PROTOTYPE_AUTH_SECRET:-dev-prototype-secret-change-me-0123456789}
+      APPROVER_EMAILS: ${APPROVER_EMAILS:-}
+      CHAT_URL: http://chat:3000
+    volumes:
+      - ./prototype-api/src:/app/src    # код — с диска
+      - prototype-data:/data            # SQLite и загруженные PDF
+    ports: ["127.0.0.1:${COLORPASS_PROTOTYPE_API_PORT:-3100}:3100"]
+    depends_on:
+      - chat
 
   redis:
     image: redis:7-alpine
@@ -108,3 +142,5 @@ volumes:
   pgdata:
   redis-data:
   frontend-node-modules:
+  prototype-node-modules:
+  prototype-data:

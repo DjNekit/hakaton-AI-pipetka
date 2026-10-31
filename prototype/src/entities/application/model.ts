@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { requestJson } from '@/shared/api'
+import { apiUrl, requestJson } from '@/shared/api'
 import { z } from '@/shared/i18n'
 
 export const APPLICATION_STATUSES = [
@@ -86,7 +86,7 @@ export function formatApplicationNumber(number: number) {
 }
 
 export function applicationFileUrl(id: string) {
-  return `/api/applications/${id}/file`
+  return apiUrl(`/applications/${id}/file`)
 }
 
 export const applicationKeys = {
@@ -99,7 +99,7 @@ const AI_POLL_INTERVAL = 3000
 export function applicationsQueryOptions() {
   return queryOptions({
     queryKey: applicationKeys.all,
-    queryFn: () => requestJson<Application[]>('/api/applications'),
+    queryFn: () => requestJson<Application[]>(apiUrl('/applications')),
     refetchInterval: query =>
       query.state.data?.some(item => item.status === 'ai_check')
         ? AI_POLL_INTERVAL
@@ -110,7 +110,7 @@ export function applicationsQueryOptions() {
 export function applicationQueryOptions(id: string) {
   return queryOptions({
     queryKey: applicationKeys.detail(id),
-    queryFn: () => requestJson<Application>(`/api/applications/${id}`),
+    queryFn: () => requestJson<Application>(apiUrl(`/applications/${id}`)),
     refetchInterval: query =>
       query.state.data?.status === 'ai_check' ? AI_POLL_INTERVAL : false,
   })

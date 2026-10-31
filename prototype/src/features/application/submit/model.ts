@@ -4,7 +4,7 @@ import {
   type Application,
   type DocumentType,
 } from '@/entities/application'
-import { HttpError, requestJson } from '@/shared/api'
+import { HttpError, apiUrl, requestJson } from '@/shared/api'
 import { i18n, z } from '@/shared/i18n'
 import {
   useMutation,
@@ -51,7 +51,7 @@ export function useSubmitApplication() {
       body.set('address', value.address)
       body.set('description', value.description)
       if (value.file) body.set('file', value.file)
-      return requestJson<Application>('/api/applications', {
+      return requestJson<Application>(apiUrl('/applications'), {
         method: 'POST',
         body,
       })

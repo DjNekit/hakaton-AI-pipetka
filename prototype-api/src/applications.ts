@@ -9,7 +9,7 @@ import type {
   Application,
   ApplicationStatus,
   DocumentType,
-} from '@/entities/application/model'
+} from './model'
 
 import type { CurrentUser } from './current-user'
 

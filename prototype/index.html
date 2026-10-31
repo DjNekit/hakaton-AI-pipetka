@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Колорпаспорт</title>
+    <script>
+      ;(function () {
+        try {
+          var stored = window.localStorage.getItem('theme')
+          var mode = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var resolved = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode
+          var root = document.documentElement
+          root.classList.remove('light', 'dark')
+          root.classList.add(resolved)
+          root.style.colorScheme = resolved
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body class="font-sans break-words antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
