@@ -31,7 +31,7 @@ export function ApplicationsTable({
     <div className="flex flex-col">
       {groups.map(group => (
         <section key={group.status}>
-          <header className="flex items-center gap-2 border-y bg-muted/40 px-6 py-2 text-sm font-medium">
+          <header className="flex items-center gap-2 border-y bg-muted/40 px-4 py-2 text-sm font-medium sm:px-6">
             <StatusIcon status={group.status} />
             {t(`application.status.${group.status}`)}
             <span className="text-muted-foreground">{group.items.length}</span>
@@ -42,7 +42,7 @@ export function ApplicationsTable({
                 <Link
                   to={detailRoute}
                   params={{ id: item.id }}
-                  className="flex h-11 items-center gap-3 border-b px-6 text-sm hover:bg-muted/50"
+                  className="flex h-11 items-center gap-3 border-b px-4 text-sm hover:bg-muted/50 sm:px-6"
                 >
                   <span className="w-14 shrink-0">
                     <ApplicationNumber number={item.number} />

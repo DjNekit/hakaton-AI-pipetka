@@ -26,29 +26,27 @@ export function AppHeader({
   const signOut = useSignOut()
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6">
-      <div className="flex items-center gap-6">
-        <div className="flex items-baseline gap-2">
-          <span className="font-semibold">{t('app.name')}</span>
-          <span className="text-xs text-muted-foreground">
-            {t(`roles.${role}`)}
-          </span>
-        </div>
-        <nav className="flex items-center gap-1">
-          {nav.map(item => (
-            <Link
-              key={item.to}
-              to={item.to}
-              activeOptions={{ exact: item.exact }}
-              className="rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+    <header className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 border-b px-4 pt-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:pt-0">
+      <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
+        <span className="font-semibold">{t('app.name')}</span>
+        <span className="text-xs text-muted-foreground">
+          {t(`roles.${role}`)}
+        </span>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="hidden text-sm text-muted-foreground sm:inline">
+      <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] items-center gap-1 overflow-x-auto px-4 pb-2 sm:order-none sm:mx-0 sm:w-auto sm:min-w-0 sm:p-0">
+        {nav.map(item => (
+          <Link
+            key={item.to}
+            to={item.to}
+            activeOptions={{ exact: item.exact, includeSearch: false }}
+            className="shrink-0 rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground hover:bg-muted hover:text-foreground data-[status=active]:bg-muted data-[status=active]:text-foreground"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        <span className="hidden truncate text-sm text-muted-foreground md:inline">
           {email}
         </span>
         <Button

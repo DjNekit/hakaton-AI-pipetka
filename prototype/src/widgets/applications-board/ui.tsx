@@ -42,7 +42,7 @@ export function ApplicationsBoard({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-6 py-4">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 py-4 sm:px-6">
       {APPLICATION_STATUSES.map(status => {
         const items = applications.filter(item => item.status === status)
         const droppable = canDrop(dragged?.status, status)

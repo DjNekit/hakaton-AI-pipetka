@@ -7,7 +7,7 @@ import { DocumentTypeLabel, formatDateTime, StatusLabel } from './labels'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[9rem_1fr] gap-3 py-1.5 text-sm">
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 py-1.5 text-sm sm:grid-cols-[9rem_minmax(0,1fr)]">
       <dt className="text-muted-foreground">{label}</dt>
       <dd>{children}</dd>
     </div>

@@ -59,6 +59,7 @@ export default {
     loadError: 'Не удалось загрузить заявки.',
     back: 'Назад',
     openPage: 'Открыть страницей',
+    closePanel: 'Закрыть',
   },
   applicant: {
     list: {

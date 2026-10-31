@@ -52,7 +52,7 @@ export function ApplicationReview({
   layout,
 }: {
   id: string
-  layout: 'page' | 'sheet'
+  layout: 'page' | 'panel'
 }) {
   const { t } = useTranslation()
   const { data, isPending, isError } = useQuery(applicationQueryOptions(id))
@@ -79,7 +79,7 @@ export function ApplicationReview({
     </section>
   )
 
-  if (layout === 'sheet') {
+  if (layout === 'panel') {
     return (
       <div className="flex flex-col gap-8">
         {properties}

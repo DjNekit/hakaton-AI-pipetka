@@ -25,7 +25,7 @@ function MyApplications() {
 
   return (
     <main className="flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <h1 className="text-lg font-semibold">{t('applicant.list.title')}</h1>
         <Link to="/applicant/new" className={buttonVariants({ size: 'sm' })}>
           <IconPlus />
@@ -33,13 +33,15 @@ function MyApplications() {
         </Link>
       </div>
       {isPending && (
-        <div className="flex flex-col gap-2 px-6">
+        <div className="flex flex-col gap-2 px-4 sm:px-6">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
         </div>
       )}
       {isError && (
-        <p className="px-6 text-destructive">{t('application.loadError')}</p>
+        <p className="px-4 text-destructive sm:px-6">
+          {t('application.loadError')}
+        </p>
       )}
       {data && data.length === 0 && (
         <Empty>
