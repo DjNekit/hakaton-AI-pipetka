@@ -18,6 +18,8 @@
 import { serve } from '@hono/node-server'
 import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
+import { subscribeApplications } from './events'
 
 import { checklistFor, runAiReview } from './ai-review'
 import {
@@ -59,6 +61,40 @@ const app = new Hono().basePath('/new/api')
 app.get('/health', c => c.json({ ok: true }))
 
 app.on(['GET', 'POST'], '/auth/*', c => auth.handler(c.req.raw))
+
+// Поток содержит только идентификаторы: данные по-прежнему проходят forViewer().
+app.get('/events', async c => {
+  const user = await getCurrentUser(c.req.raw)
+  if (!user) return jsonError(401, 'unauthorized')
+  c.header('X-Accel-Buffering', 'no')
+  c.header('Cache-Control', 'no-cache, no-transform')
+  return streamSSE(c, async stream => {
+    let closed = false
+    let pending = Promise.resolve()
+    const unsubscribe = subscribeApplications(user, id => {
+      pending = pending.then(async () => {
+        if (!closed) await stream.writeSSE({ event: 'application', data: JSON.stringify({ id }) })
+      }).catch(() => { closed = true })
+    })
+    stream.onAbort(() => { closed = true; unsubscribe() })
+    try {
+      await stream.writeSSE({ event: 'ready', data: '{}', retry: 3000 })
+      while (!closed && !stream.aborted) {
+        await stream.sleep(15000)
+        if (closed || stream.aborted) break
+        const current = await getCurrentUser(c.req.raw)
+        if (!current || current.id !== user.id || current.role !== user.role) {
+          await stream.writeSSE({ event: 'session-ended', data: '{}' })
+          break
+        }
+        await stream.writeSSE({ event: 'heartbeat', data: '{}' })
+      }
+    } finally {
+      closed = true
+      unsubscribe()
+    }
+  })
+})
 
 app.get('/applications', async c => {
   const user = await getCurrentUser(c.req.raw)

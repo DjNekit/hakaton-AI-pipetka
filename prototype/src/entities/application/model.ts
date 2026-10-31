@@ -143,7 +143,8 @@ export const applicationKeys = {
   checklist: (id: string) => ['applications', id, 'checklist'] as const,
 }
 
-const POLL_INTERVAL = 4000
+// Резервное обновление, если поток SSE временно недоступен.
+const POLL_INTERVAL = 30000
 
 function inProgress(status: ApplicationStatus) {
   return status === 'ai_check' || status === 'review'

@@ -10,6 +10,7 @@ import { useEffect } from 'react'
 
 import { NotFound, ConnectionError } from '@/pages/-root'
 import { authClient } from '@/shared/auth-client'
+import { apiUrl } from '@/shared/api'
 import { I18nProvider } from '@/shared/i18n'
 import { QueryClientProvider } from '@/shared/query'
 import type { QueryClient } from '@/shared/query'
@@ -34,10 +35,28 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootLayout() {
   const context = Route.useRouteContext()
+  const router = useRouter()
 
   useEffect(() => {
     document.documentElement.dataset.hydrated = 'true'
   }, [])
+
+  const userId = context.session?.user.id
+  useEffect(() => {
+    if (!userId) return
+    const events = new EventSource(apiUrl('/events'))
+    const refresh = () => {
+      void context.queryClient.invalidateQueries({ queryKey: ['applications'] })
+    }
+    events.addEventListener('ready', refresh)
+    events.addEventListener('application', refresh)
+    events.addEventListener('session-ended', () => {
+      events.close()
+      context.queryClient.clear()
+      void router.invalidate()
+    })
+    return () => events.close()
+  }, [userId, context.queryClient, router])
 
   return (
     <ThemeProvider>

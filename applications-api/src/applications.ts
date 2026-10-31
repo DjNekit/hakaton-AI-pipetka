@@ -17,6 +17,7 @@ import {
 } from './model'
 
 import type { CurrentUser } from './current-user'
+import { publishApplication } from './events'
 
 type Row = Omit<
   Application,
@@ -289,6 +290,7 @@ export async function createDraft(
       })
     insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
   })()
+  notifyChange(id)
   return getApplication(id)!
 }
 
@@ -305,6 +307,7 @@ export async function addVersion(
     insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
     touch(id, { ...input, fileName: file.name, filePath })
   })()
+  notifyChange(id)
   return getApplication(id)!
 }
 
@@ -319,6 +322,10 @@ export function setVersionSummary(versionId: string, summary: VersionSummary) {
   connection()
     .prepare('update application_version set summary = ? where id = ?')
     .run(JSON.stringify(summary), versionId)
+  const version = connection().prepare<[string], { applicationId: string }>(
+    'select applicationId from application_version where id = ?',
+  ).get(versionId)
+  if (version) notifyChange(version.applicationId)
 }
 
 export function readVersionFile(applicationId: string, versionId: string) {
@@ -345,6 +352,14 @@ export function submitDraft(id: string, versionId: string, input: DraftFields) {
   return { application: getApplication(id)! }
 }
 
+function notifyChange(id: string) {
+  // Уведомление отправляется после завершения текущей транзакции.
+  queueMicrotask(() => {
+    const application = getApplication(id)
+    if (application) publishApplication(application)
+  })
+}
+
 function touch(id: string, fields: Record<string, string>) {
   const columns = Object.keys(fields)
     .map(column => `${column} = @${column}`)
@@ -352,6 +367,7 @@ function touch(id: string, fields: Record<string, string>) {
   connection()
     .prepare(`update application set ${columns}, updatedAt = @now where id = @id`)
     .run({ ...fields, now: new Date().toISOString(), id })
+  notifyChange(id)
 }
 
 export function setAiReview(id: string, aiReview: AiReview) {
