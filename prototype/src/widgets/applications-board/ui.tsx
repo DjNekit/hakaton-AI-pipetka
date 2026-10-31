@@ -22,8 +22,8 @@ function Progress({
 }) {
   const { t } = useTranslation()
   if (application.status !== 'review') return null
+  const done = Boolean(application.approverReview)
   if (role === 'approver') {
-    const done = Boolean(application.approverReview)
     return (
       <span
         className={`text-xs ${done ? 'text-muted-foreground' : 'font-medium text-amber-600 dark:text-amber-400'}`}
@@ -33,16 +33,10 @@ function Progress({
       </span>
     )
   }
-  const aiState = application.aiReview?.state
-  const aiDone = aiState === 'done' || aiState === 'failed'
   return (
     <span className="text-xs text-muted-foreground">
-      {t('application.progress.ai')}:{' '}
-      {t(`application.progress.${aiDone ? 'done' : 'pending'}`)} ·{' '}
       {t('application.progress.approver')}:{' '}
-      {t(
-        `application.progress.${application.approverReview ? 'done' : 'pending'}`,
-      )}
+      {t(`application.progress.${done ? 'done' : 'pending'}`)}
     </span>
   )
 }

@@ -4,6 +4,7 @@ import { apiUrl, requestJson } from '@/shared/api'
 import { z } from '@/shared/i18n'
 
 export const APPLICATION_STATUSES = [
+  'ai_check',
   'review',
   'normcontrol',
   'approved',
@@ -118,12 +119,16 @@ export const applicationKeys = {
 
 const POLL_INTERVAL = 4000
 
+function inProgress(status: ApplicationStatus) {
+  return status === 'ai_check' || status === 'review'
+}
+
 export function applicationsQueryOptions() {
   return queryOptions({
     queryKey: applicationKeys.all,
     queryFn: () => requestJson<Application[]>(apiUrl('/applications')),
     refetchInterval: query =>
-      query.state.data?.some(item => item.status === 'review')
+      query.state.data?.some(item => inProgress(item.status))
         ? POLL_INTERVAL
         : false,
   })
@@ -134,7 +139,9 @@ export function applicationQueryOptions(id: string) {
     queryKey: applicationKeys.detail(id),
     queryFn: () => requestJson<Application>(apiUrl(`/applications/${id}`)),
     refetchInterval: query =>
-      query.state.data?.status === 'review' ? POLL_INTERVAL : false,
+      query.state.data && inProgress(query.state.data.status)
+        ? POLL_INTERVAL
+        : false,
   })
 }
 

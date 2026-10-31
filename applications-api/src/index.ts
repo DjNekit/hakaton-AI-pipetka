@@ -2,7 +2,7 @@
 //   /new/api/auth/*                     better-auth: регистрация, вход, коды, сброс пароля
 //   GET/POST /new/api/applications      заявки (заявитель — свои, согласующий и нормоконтролёр — все)
 //   GET /new/api/applications/:id       заявка (согласующему — без проверки ИИ, заявителю — только решение)
-//   GET /new/api/applications/:id/checklist        пункты чек-листа для ручной проверки
+//   GET /new/api/applications/:id/checklist        пункты чек-листа для ручной проверки (после автоматической)
 //   POST /new/api/applications/:id/approver-review проверка согласующего (независимо от ИИ)
 //   POST /new/api/applications/:id/decision        решение нормоконтролёра
 //   GET /new/api/applications/:id/file  PDF заявки

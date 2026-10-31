@@ -84,7 +84,11 @@ function ApproverWork({ application }: { application: Application }) {
       )}
       {!canReview && !application.approverReview && (
         <p className="text-sm text-muted-foreground">
-          {t('approver.review.locked')}
+          {t(
+            application.status === 'ai_check'
+              ? 'approver.review.waitingAi'
+              : 'approver.review.locked',
+          )}
         </p>
       )}
     </Section>
@@ -112,14 +116,14 @@ function NormcontrolWork({ application }: { application: Application }) {
 
   return (
     <>
-      {application.status === 'review' && (
+      {(application.status === 'ai_check' ||
+        application.status === 'review') && (
         <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-          {t('normcontrol.compare.waiting', {
-            ai: t(`application.progress.${aiDone ? 'done' : 'pending'}`),
-            approver: t(
-              `application.progress.${approverReview ? 'done' : 'pending'}`,
-            ),
-          })}
+          {t(
+            application.status === 'ai_check'
+              ? 'normcontrol.compare.waitingAi'
+              : 'normcontrol.compare.waitingApprover',
+          )}
         </p>
       )}
       {approverReview && (

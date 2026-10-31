@@ -127,7 +127,7 @@ export async function createApplication(
     connection()
       .prepare(
         `insert into application (id, number, applicantId, applicantName, applicantEmail, documentType, address, description, fileName, filePath, status, reviewComment, createdAt, updatedAt)
-         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'review', '', @now, @now)`,
+         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'ai_check', '', @now, @now)`,
       )
       .run({
         id,
@@ -154,22 +154,14 @@ function touch(id: string, fields: Record<string, string>) {
     .run({ ...fields, now: new Date().toISOString(), id })
 }
 
-function advanceIfReady(id: string) {
-  const application = getApplication(id)
-  if (
-    application?.status === 'review' &&
-    application.approverReview &&
-    (application.aiReview?.state === 'done' ||
-      application.aiReview?.state === 'failed')
-  ) {
-    touch(id, { status: 'normcontrol' })
-  }
-}
-
 export function setAiReview(id: string, aiReview: AiReview) {
-  if (!findRow(id)) return
-  touch(id, { aiReview: JSON.stringify(aiReview) })
-  advanceIfReady(id)
+  const row = findRow(id)
+  if (!row) return
+  const finished = aiReview.state === 'done' || aiReview.state === 'failed'
+  touch(id, {
+    aiReview: JSON.stringify(aiReview),
+    status: finished && row.status === 'ai_check' ? 'review' : row.status,
+  })
 }
 
 export function submitApproverReview(
@@ -190,8 +182,10 @@ export function submitApproverReview(
     ...input,
     submittedAt: new Date().toISOString(),
   }
-  touch(id, { approverReview: JSON.stringify(review) })
-  advanceIfReady(id)
+  touch(id, {
+    approverReview: JSON.stringify(review),
+    status: 'normcontrol',
+  })
   return { application: getApplication(id)! }
 }
 

@@ -9,6 +9,7 @@ export function toRole(value: unknown): Role {
 }
 
 export const APPLICATION_STATUSES = [
+  'ai_check',
   'review',
   'normcontrol',
   'approved',

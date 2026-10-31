@@ -1,6 +1,7 @@
 import type { ApplicationStatus } from '../model'
 
 const COLORS: Record<ApplicationStatus, string> = {
+  ai_check: 'text-violet-500',
   review: 'text-amber-500',
   normcontrol: 'text-indigo-500',
   approved: 'text-emerald-500',
@@ -21,6 +22,22 @@ export function StatusIcon({
       aria-hidden="true"
       className={`${COLORS[status]} shrink-0 ${className}`}
     >
+      {status === 'ai_check' && (
+        <>
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeDasharray="1.6 1.6"
+          />
+          <path
+            d="M7 4.2l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"
+            fill="currentColor"
+          />
+        </>
+      )}
       {status === 'review' && (
         <>
           <circle
