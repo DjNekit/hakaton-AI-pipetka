@@ -98,7 +98,7 @@ export default function PackageView({ pkg }) {
       </section>
 
       <section className="pkg-section" aria-label="Сверка документов пакета">
-        <h2>Сверка документов между собой</h2>
+        <h2>Чек-лист пакета документов</h2>
         {(pkg.checks || []).length === 0 ? (
           <p className="muted">{busy ? "Появится, когда будут проверены все документы." : "Нет данных."}</p>
         ) : (
@@ -111,6 +111,13 @@ export default function PackageView({ pkg }) {
                   <span>
                     <code>{ch.rule}</code> {ch.title}
                     {ch.note && <span className="muted pkg-note">{ch.note}</span>}
+                    {ch.requirement && <span className="muted pkg-note">{ch.requirement}</span>}
+                    {ch.ref && <span className="muted pkg-note">Основание: {ch.ref}</span>}
+                    {(ch.evidence || []).map((e, i) => (
+                      <span className="muted pkg-note" key={i}>
+                        {e.file}{e.page ? `, стр. ${e.page}` : ""}: {e.quote || e.note || e.status}
+                      </span>
+                    ))}
                   </span>
                 </li>
               );

@@ -95,6 +95,7 @@ export interface Application {
   address: string
   description: string
   fileName: string
+  files?: Array<{ name: string; index: number }>
   status: ApplicationStatus
   aiReview: AiReview | null
   approverReview: ApproverReview | null
@@ -107,8 +108,8 @@ export function formatApplicationNumber(number: number) {
   return `ЗК-${number}`
 }
 
-export function applicationFileUrl(id: string) {
-  return apiUrl(`/applications/${id}/file`)
+export function applicationFileUrl(id: string, index = 0) {
+  return apiUrl(`/applications/${id}/file?index=${index}`)
 }
 
 export const applicationKeys = {

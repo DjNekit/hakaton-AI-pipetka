@@ -65,16 +65,18 @@ app.post('/applications', async c => {
   const documentType = documentTypeSchema.safeParse(form.get('documentType'))
   const address = text(form.get('address'))
   const description = text(form.get('description'))
-  const file = form.get('file')
+  const files = [...form.getAll('files'), ...form.getAll('file')]
+  const file = files[0]
   if (!documentType.success || !address) return jsonError(400, 'invalid_fields')
-  if (!(file instanceof File) || file.type !== 'application/pdf') {
+  if (!files.length || files.length > 20 || files.some(f => !(f instanceof File) || f.type !== 'application/pdf')) {
     return jsonError(400, 'invalid_file')
   }
-  if (file.size > MAX_FILE_SIZE) return jsonError(400, 'file_too_large')
+  if (files.some(f => (f as File).size > MAX_FILE_SIZE)) return jsonError(400, 'file_too_large')
   const application = await createApplication(
     user,
     { documentType: documentType.data, address, description },
-    file,
+    file as File,
+    files.slice(1) as File[],
   )
   void runAiReview(application.id)
   return c.json(forViewer(user, application), 201)
@@ -96,7 +98,7 @@ app.get('/applications/:id/checklist', async c => {
   if (user.role === 'applicant') return jsonError(403, 'forbidden')
   const application = getApplication(c.req.param('id'))
   if (!application) return jsonError(404, 'not_found')
-  return c.json(checklistFor(application.documentType))
+  return c.json(await checklistFor(application.documentType))
 })
 
 app.post('/applications/:id/approver-review', async c => {
@@ -110,7 +112,7 @@ app.post('/applications/:id/approver-review', async c => {
   )
   if (!body.success) return jsonError(400, 'invalid_fields')
   const answers = new Map(body.data.items.map(item => [item.id, item]))
-  const checklist = checklistFor(application.documentType)
+  const checklist = await checklistFor(application.documentType)
   if (checklist.some(item => !answers.has(item.id))) {
     return jsonError(400, 'incomplete_checklist')
   }
@@ -152,7 +154,9 @@ app.get('/applications/:id/file', async c => {
   if (!application || !canAccess(user, application)) {
     return jsonError(404, 'not_found')
   }
-  const file = readApplicationFile(c.req.param('id'))
+  const index = Number(c.req.query('index') ?? 0)
+  if (!Number.isInteger(index) || index < 0) return jsonError(400, 'invalid_fields')
+  const file = readApplicationFile(c.req.param('id'), index)
   if (!file) return jsonError(404, 'not_found')
   return new Response(new Uint8Array(file.data), {
     headers: {
@@ -200,6 +204,12 @@ if (migrations.toBeCreated.length || migrations.toBeAdded.length) {
 }
 
 const port = Number(process.env.PORT ?? 3100)
+for (const application of listApplications()) {
+  if ((application.status === 'ai_check' || application.status === 'review') &&
+      (!application.aiReview || application.aiReview.state === 'running')) {
+    void runAiReview(application.id)
+  }
+}
 serve({ fetch: app.fetch, port }, () => {
   console.log(`applications-api: http://0.0.0.0:${port}/new/api, chat ${CHAT_URL}`)
 })

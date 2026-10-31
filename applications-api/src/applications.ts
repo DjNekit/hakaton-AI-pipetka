@@ -49,6 +49,11 @@ function connection() {
       updatedAt text not null
     )
   `)
+  db.exec(`create table if not exists application_file (
+    applicationId text not null, position integer not null,
+    name text not null, path text not null,
+    primary key (applicationId, position)
+  )`)
   const columns = db
     .prepare<[], { name: string }>('pragma table_info(application)')
     .all()
@@ -81,6 +86,9 @@ function toApplication({
     aiReview: parse<AiReview>(aiReview),
     approverReview: parse<ApproverReview>(approverReview),
     decision: parse<Decision>(decision),
+    files: connection().prepare<[string], { name: string; index: number }>(
+      'select name, position as "index" from application_file where applicationId = ? order by position',
+    ).all(rest.id),
   }
 }
 
@@ -112,11 +120,18 @@ export async function createApplication(
   user: CurrentUser,
   input: { documentType: DocumentType; address: string; description: string },
   file: File,
+  attachments: File[] = [],
 ) {
   const id = randomUUID()
   mkdirSync(UPLOADS_DIR, { recursive: true })
   const filePath = path.join(UPLOADS_DIR, `${id}.pdf`)
   writeFileSync(filePath, Buffer.from(await file.arrayBuffer()))
+  const additionalFiles = []
+  for (const [index, attachment] of attachments.entries()) {
+    const target = path.join(UPLOADS_DIR, `${id}-${index + 1}.pdf`)
+    writeFileSync(target, Buffer.from(await attachment.arrayBuffer()))
+    additionalFiles.push({ name: attachment.name, path: target })
+  }
   const now = new Date().toISOString()
   const insert = connection().transaction(() => {
     const { next } = connection()
@@ -140,6 +155,12 @@ export async function createApplication(
         filePath,
         now,
       })
+    const saveFile = connection().prepare(
+      'insert into application_file (applicationId, position, name, path) values (?, ?, ?, ?)',
+    )
+    for (const [index, entry] of [{ name: file.name, path: filePath }, ...additionalFiles].entries()) {
+      saveFile.run(id, index, entry.name, entry.path)
+    }
   })
   insert()
   return getApplication(id)!
@@ -209,10 +230,26 @@ export function decideApplication(
   return { application: getApplication(id)! }
 }
 
-export function readApplicationFile(id: string) {
+export function readApplicationFile(id: string, index = 0) {
   const row = findRow(id)
   if (!row) return undefined
+  const entry = connection().prepare<[string, number], { name: string; path: string }>(
+    'select name, path from application_file where applicationId = ? and position = ?',
+  ).get(id, index)
+  if (entry) return { name: entry.name, data: readFileSync(entry.path) }
+  if (index !== 0) return undefined
   return { name: row.fileName, data: readFileSync(row.filePath) }
+}
+
+export function readApplicationFiles(id: string) {
+  const rows = connection().prepare<[string], { name: string; path: string }>(
+    'select name, path from application_file where applicationId = ? order by position',
+  ).all(id)
+  if (!rows.length) {
+    const first = readApplicationFile(id)
+    return first ? [first] : []
+  }
+  return rows.map(row => ({ name: row.name, data: readFileSync(row.path) }))
 }
 
 export function forViewer(

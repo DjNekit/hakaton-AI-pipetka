@@ -41,6 +41,7 @@ export interface AiReview {
   items: AiReviewItem[]
   error?: string
   model?: string
+  packageId?: string
   finishedAt?: string
 }
 
@@ -58,6 +59,7 @@ export interface Application {
   address: string
   description: string
   fileName: string
+  files?: Array<{ name: string; index: number }>
   status: ApplicationStatus
   aiReview: AiReview | null
   approverReview: ApproverReview | null

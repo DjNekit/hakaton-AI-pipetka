@@ -10,6 +10,7 @@ export default function Sidebar({ packages, currentId, uploading, onUpload, onOp
   const [drag, setDrag] = useState(false);
   const [files, setFiles] = useState([]);
   const [title, setTitle] = useState("");
+  const [serviceType, setServiceType] = useState("passport");
 
   const add = (list) => {
     const picked = Array.from(list || []).filter(isAccepted);
@@ -20,7 +21,7 @@ export default function Sidebar({ packages, currentId, uploading, onUpload, onOp
 
   const submit = async () => {
     if (!pdfs || uploading) return;
-    await onUpload(files, title);
+    await onUpload(files, title, serviceType);
     setFiles([]);
     setTitle("");
   };
@@ -29,6 +30,14 @@ export default function Sidebar({ packages, currentId, uploading, onUpload, onOp
     <aside className="sidebar" aria-label="Пакеты документов">
       <section className="side-block">
         <h2 className="side-title">Новый пакет</h2>
+        <label>
+          Чек-лист
+          <select value={serviceType} onChange={(event) => setServiceType(event.target.value)}>
+            <option value="passport">Паспорт колористического решения</option>
+            <option value="signage">Дизайн-проект вывесок</option>
+            <option value="facade">Изменение архитектурного решения</option>
+          </select>
+        </label>
         <div
           className={`dropzone${drag ? " is-drag" : ""}`}
           onDragOver={(e) => {

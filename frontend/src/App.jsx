@@ -96,14 +96,14 @@ export default function App() {
   };
 
   // файлы → checker (загрузка) → бэкенд (пакет и очередь проверки)
-  const uploadPackage = async (files, title) => {
+  const uploadPackage = async (files, title, service_type) => {
     setError(null);
     setUploading(`Загружаю ${files.length} ${files.length === 1 ? "файл" : files.length < 5 ? "файла" : "файлов"}…`);
     try {
       const { uploads, errors } = await api.uploadFiles(files);
       if (errors && errors.length) setError(`Не приняты: ${errors.join("; ")}`);
       setUploading("Создаю пакет…");
-      await start(api.createPackage({ uploads, title }));
+      await start(api.createPackage({ uploads, title, service_type }));
     } catch (e) {
       setError(e.message);
     } finally {

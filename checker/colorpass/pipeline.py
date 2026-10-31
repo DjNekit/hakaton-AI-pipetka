@@ -25,6 +25,45 @@ PREVIEW_SCALE = 1.5  # 108 dpi — изображения листов для и
 Progress = Callable[[str, float], None]
 
 
+def _run_supporting(doc: Document, pdf_path: str | Path, out: Path,
+                    write_images: bool, service_type: str) -> dict:
+    """Приложения не проверяются как самостоятельные паспорта; текст — доказательства пакета."""
+    started = time.monotonic()
+    passport = build_passport(doc)
+    address = passport.title.get("Адрес") or passport.general.get("Адрес объекта")
+    if service_type == "signage":
+        from .signage import build_signage
+
+        address = build_signage(doc).address or address
+    pages = []
+    for p in doc.pages:
+        image = f"pages/p{p.index + 1:02d}.png"
+        if write_images:
+            (out / "pages").mkdir(exist_ok=True)
+            Image.fromarray(doc.render(p.index, PREVIEW_SCALE)).save(out / image)
+        pages.append({"index": p.index, "number": p.index + 1, "image": image,
+                      "kinds": passport.pages[p.index], "kind_title": "Документ пакета", "findings": [],
+                      "width": p.width, "height": p.height,
+                      "is_scan": p.is_scan, "ocr": p.ocr_used, "notes": p.notes})
+    report = {"version": __version__, "file": Path(pdf_path).name,
+              "document_kind": "facade" if service_type == "facade" else "supporting",
+              "verdict": "warn", "counts": {"errors": 0, "warnings": 0, "rules_total": 0,
+                                               "rules_ok": 0, "rules_failed": 0, "rules_warn": 0, "rules_skipped": 0},
+              "summary": {"pages": len(pages), "address": address}, "pages": pages,
+              "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "passport": {"title": passport.title, "general": passport.general,
+                           "finish_table": [], "note_mentions": [], "facades": []},
+              "page_texts": [{"page": p.index + 1, "text": p.text} for p in doc.pages],
+              "checklist": [], "findings": [],
+              "conclusion": {"text": "Документ включён в проверку пакета. Самостоятельная проверка нормативного соответствия не выполнена.",
+                             "source": "template"},
+              "llm": {"used": False}}
+    report["duration_s"] = round(time.monotonic() - started, 2)
+    (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "conclusion.md").write_text(report["conclusion"]["text"], encoding="utf-8")
+    return report
+
+
 def _noop(stage: str, frac: float) -> None:  # pragma: no cover
     pass
 
@@ -77,6 +116,7 @@ def run_check(
     out_dir: str | Path,
     progress: Progress = _noop,
     write_images: bool = True,
+    service_type: str | None = None,
 ) -> dict:
     t0 = time.time()
     out = Path(out_dir)
@@ -88,6 +128,8 @@ def run_check(
     try:
         from .signage import is_signage
 
+        if service_type:
+            return _run_supporting(doc, pdf_path, out, write_images, service_type)
         if is_signage(doc):
             return _run_signage(doc, pdf_path, out, rules, progress, write_images, t0)
         progress("Разбор структуры паспорта", 0.15)
@@ -227,6 +269,7 @@ def run_check(
             "conclusion": conclusion,
         }
         report["duration_s"] = round(time.time() - t0, 2)
+        report["page_texts"] = [{"page": p.index + 1, "text": p.text} for p in doc.pages]
         (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         (out / "conclusion.md").write_text(conclusion["text"], encoding="utf-8")
         progress("Готово", 1.0)
@@ -331,6 +374,7 @@ def _run_signage(doc, pdf_path, out: Path, rules: dict, progress: Progress, writ
         "conclusion": conclusion,
     }
     report["duration_s"] = round(time.time() - t0, 2)
+    report["page_texts"] = [{"page": p.index + 1, "text": p.text} for p in doc.pages]
     (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     (out / "conclusion.md").write_text(conclusion["text"], encoding="utf-8")
     progress("Готово", 1.0)

@@ -19,21 +19,21 @@ export const submitApplicationSchema = z.object({
   documentType: documentTypeSchema,
   address: z.string().trim().nonempty().max(300),
   description: z.string().max(2000),
-  file: z
+  files: z.array(z
     .instanceof(File, { message: i18n.t('validation.fileRequired') })
     .refine(file => file.type === 'application/pdf', {
       message: i18n.t('validation.pdfOnly'),
     })
     .refine(file => file.size <= MAX_FILE_SIZE, {
       message: i18n.t('validation.fileTooLarge'),
-    }),
+    })).min(1, { message: i18n.t('validation.fileRequired') }).max(20),
 })
 
 export interface SubmitApplicationData {
   documentType: DocumentType
   address: string
   description: string
-  file: File | null
+  files: File[]
 }
 
 export type SubmitApplicationCallbacks = MutationCallbacks<
@@ -50,7 +50,7 @@ export function useSubmitApplication() {
       body.set('documentType', value.documentType)
       body.set('address', value.address)
       body.set('description', value.description)
-      if (value.file) body.set('file', value.file)
+      for (const file of value.files) body.append('files', file)
       return requestJson<Application>(apiUrl('/applications'), {
         method: 'POST',
         body,
@@ -78,7 +78,7 @@ export function useSubmitApplicationForm(
       documentType: 'passport',
       address: '',
       description: '',
-      file: null,
+      files: [],
     } as SubmitApplicationData,
     onSubmit: async ({ value }) => {
       await submit.mutateAsync(value, callbacks).catch(() => undefined)
