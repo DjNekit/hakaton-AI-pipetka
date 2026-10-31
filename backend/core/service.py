@@ -194,8 +194,8 @@ def _refresh_package(pid: str) -> dict | None:
     pkg["verdict"] = max(verdicts, key=lambda v: _ORDER[v]) if pkg["state"] == "done" and verdicts else None
     pkg["counts"] = {
         "documents": len(docs),
-        "errors": sum((d.get("counts") or {}).get("errors", 0) for d in docs),
-        "warnings": sum((d.get("counts") or {}).get("warnings", 0) for d in docs),
+        "errors": sum((d.get("counts") or {}).get("errors", 0) for d in docs) + sum(c.get("status") == "fail" for c in pkg.get("checks") or []),
+        "warnings": sum((d.get("counts") or {}).get("warnings", 0) for d in docs) + sum(c.get("status") == "warn" for c in pkg.get("checks") or []),
     }
     store.save_package(pkg)
     return pkg
@@ -217,9 +217,12 @@ def _live(status: dict) -> dict:
 # ================================================================= пакеты
 
 
-def create_package(uploads: list[dict] | None = None, samples_: list[str] | None = None, title: str = "") -> dict:
+def create_package(uploads: list[dict] | None = None, samples_: list[str] | None = None, title: str = "",
+                   service_type: str | None = None) -> dict:
     """Пакет документов одной заявки: PDF — документы (паспорт, дизайн-проект вывесок), JPEG/PNG — фото объекта.
     uploads — ответ checker на загрузку: [{id, name, kind}]; samples_ — имена образцов из dataset/."""
+    if service_type not in (None, "passport", "signage", "facade"):
+        raise BadRequest("Тип проверки: passport, signage или facade")
     uploads = [u for u in (uploads or []) if isinstance(u, dict)]
     for u in uploads:
         if not _valid(u.get("id")) or u.get("kind") not in ("pdf", "image"):
@@ -256,12 +259,14 @@ def create_package(uploads: list[dict] | None = None, samples_: list[str] | None
         "created_at": created,
         "finished_at": None,
         "checks": [],
+        "service_type": service_type,
         "photos": [],
         "photos_uploaded": len(photos),
     }
     store.save_package(pkg)
     try:
-        push_job(redis(), JOBS, "check_package", {"package_id": pid, "documents": documents, "photos": photos})
+        push_job(redis(), JOBS, "check_package", {"package_id": pid, "documents": documents,
+                                               "photos": photos, "service_type": service_type})
     except OSError as exc:
         raise Unavailable(f"Очередь задач (Redis) недоступна: {exc}") from exc
     return get_package(pid)

@@ -17,13 +17,11 @@ export const draftSchema = z.object({
   description: z.string().max(2000),
 })
 
-export function fileValidator({ value }: { value: File | null }) {
-  if (!value) return undefined
-  if (value.type !== 'application/pdf') {
-    return { message: i18n.t('validation.pdfOnly') }
-  }
-  if (value.size > MAX_FILE_SIZE) {
-    return { message: i18n.t('validation.fileTooLarge') }
+export function fileValidator({ value }: { value: File[] }) {
+  if (value.length > 20) return { message: 'Не более 20 файлов' }
+  for (const file of value) {
+    if (file.type !== 'application/pdf') return { message: i18n.t('validation.pdfOnly') }
+    if (file.size > MAX_FILE_SIZE) return { message: i18n.t('validation.fileTooLarge') }
   }
   return undefined
 }
@@ -32,7 +30,7 @@ export interface DraftValues {
   documentType: DocumentType
   address: string
   description: string
-  file: File | null
+  files: File[]
 }
 
 const errorMeta = {
@@ -44,12 +42,12 @@ const errorMeta = {
       : undefined,
 }
 
-function uploadBody(values: DraftValues, file: File) {
+function uploadBody(values: DraftValues, files: File[]) {
   const body = new FormData()
   body.set('documentType', values.documentType)
   body.set('address', values.address.trim())
   body.set('description', values.description.trim())
-  body.set('file', file)
+  for (const file of files) body.append('files', file)
   return body
 }
 
@@ -67,14 +65,14 @@ function useCacheApplication() {
 export function useCheckVersion(applicationId: string | undefined) {
   const cache = useCacheApplication()
   return useMutation({
-    mutationFn: ({ values, file }: { values: DraftValues; file: File }) =>
+    mutationFn: ({ values, files }: { values: DraftValues; files: File[] }) =>
       requestJson<Application>(
         apiUrl(
           applicationId
             ? `/applications/${applicationId}/versions`
             : '/applications/drafts',
         ),
-        { method: 'POST', body: uploadBody(values, file) },
+        { method: 'POST', body: uploadBody(values, files) },
       ),
     onSuccess: cache,
     meta: errorMeta,
@@ -118,7 +116,7 @@ export function useDraftForm(
       documentType: application?.documentType ?? 'passport',
       address: application?.address ?? '',
       description: application?.description ?? '',
-      file: null,
+      files: [],
     } as DraftValues,
     onSubmit: ({ value }) => onSubmit(value),
     validationLogic: blurFirstValidationLogic,

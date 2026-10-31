@@ -33,7 +33,7 @@ export const api = {
     for (const f of files) fd.append("files", f, f.name);
     return request("/uploads", { method: "POST", body: fd }, FILES);
   },
-  createPackage: ({ uploads = [], samples = [], title = "" }) => request("/packages", json("POST", { uploads, samples, title })),
+  createPackage: ({ uploads = [], samples = [], title = "", service_type = null }) => request("/packages", json("POST", { uploads, samples, title, service_type })),
   packages: () => request("/packages").then((d) => d.packages),
   package: (id) => request(`/packages/${id}`),
   checkSample: (name) => request(`/samples/${name}/check`, { method: "POST" }),

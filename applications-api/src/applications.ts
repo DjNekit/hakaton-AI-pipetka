@@ -71,6 +71,16 @@ function connection() {
       updatedAt text not null
     )
   `)
+  db.exec(`create table if not exists application_file (
+    applicationId text not null, position integer not null,
+    name text not null, path text not null,
+    primary key (applicationId, position)
+  )`)
+  db.exec(`create table if not exists application_version_file (
+    versionId text not null, position integer not null,
+    name text not null, path text not null,
+    primary key (versionId, position)
+  )`)
   const columns = db
     .prepare<[], { name: string }>('pragma table_info(application)')
     .all()
@@ -106,6 +116,13 @@ function connection() {
       select v.id from application_version v where v.applicationId = application.id order by v.version desc limit 1
     ) where submittedVersionId is null and status != 'draft'
   `)
+  db.exec(`insert or ignore into application_version_file (versionId, position, name, path)
+    select v.id, f.position, f.name, f.path from application_version v
+    join application_file f on f.applicationId = v.applicationId
+    where v.id = (select id from application_version where applicationId = v.applicationId order by version desc limit 1)
+      and not exists (select 1 from application_version_file vf where vf.versionId = v.id)`)
+  db.exec(`insert or ignore into application_version_file (versionId, position, name, path)
+    select id, 0, fileName, filePath from application_version`)
   const known = APPLICATION_STATUSES.map(status => `'${status}'`).join(', ')
   db.exec(
     `update application set status = 'review' where status not in (${known})`,
@@ -150,6 +167,9 @@ function toApplication({
     approverReview: parse<ApproverReview>(approverReview),
     decision: parse<Decision>(decision),
     versions: versionRows(rest.id).map(toVersion),
+    files: connection().prepare<[string], { name: string; index: number }>(
+      'select name, position as "index" from application_file where applicationId = ? order by position',
+    ).all(rest.id),
   }
 }
 
@@ -190,6 +210,7 @@ function insertVersion(
   applicationId: string,
   file: { name: string; path: string },
   packageId: string,
+  attachments: Array<{ name: string; path: string }> = [],
 ) {
   const id = randomUUID()
   const { next } = connection()
@@ -211,7 +232,26 @@ function insertVersion(
       packageId,
       createdAt: new Date().toISOString(),
     })
+  const save = connection().prepare(
+    'insert into application_version_file (versionId, position, name, path) values (?, ?, ?, ?)',
+  )
+  for (const [index, entry] of [file, ...attachments].entries()) {
+    save.run(id, index, entry.name, entry.path)
+  }
+  selectVersionFiles(applicationId, id)
   return id
+}
+
+function selectVersionFiles(applicationId: string, versionId: string) {
+  connection().prepare('delete from application_file where applicationId = ?').run(applicationId)
+  connection().prepare(`insert into application_file (applicationId, position, name, path)
+    select ?, position, name, path from application_version_file where versionId = ?`).run(applicationId, versionId)
+}
+
+async function storeAttachments(files: File[]) {
+  return Promise.all(files.map(async file => ({
+    name: file.name, path: await storeFile(randomUUID(), file),
+  })))
 }
 
 export async function createDraft(
@@ -219,9 +259,11 @@ export async function createDraft(
   input: DraftFields,
   file: File,
   packageId: string,
+  attachments: File[] = [],
 ) {
   const id = randomUUID()
   const filePath = await storeFile(randomUUID(), file)
+  const additionalFiles = await storeAttachments(attachments)
   const now = new Date().toISOString()
   connection().transaction(() => {
     const { next } = connection()
@@ -245,7 +287,7 @@ export async function createDraft(
         filePath,
         now,
       })
-    insertVersion(id, { name: file.name, path: filePath }, packageId)
+    insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
   })()
   return getApplication(id)!
 }
@@ -255,10 +297,12 @@ export async function addVersion(
   input: DraftFields,
   file: File,
   packageId: string,
+  attachments: File[] = [],
 ) {
   const filePath = await storeFile(randomUUID(), file)
+  const additionalFiles = await storeAttachments(attachments)
   connection().transaction(() => {
-    insertVersion(id, { name: file.name, path: filePath }, packageId)
+    insertVersion(id, { name: file.name, path: filePath }, packageId, additionalFiles)
     touch(id, { ...input, fileName: file.name, filePath })
   })()
   return getApplication(id)!
@@ -288,13 +332,16 @@ export function submitDraft(id: string, versionId: string, input: DraftFields) {
   if (application.status !== 'draft') return { error: 'invalid_state' as const }
   const version = findVersion(id, versionId)
   if (!version) return { error: 'not_found' as const }
-  touch(id, {
-    ...input,
-    fileName: version.fileName,
-    filePath: version.filePath,
-    submittedVersionId: version.id,
-    status: 'ai_check',
-  })
+  connection().transaction(() => {
+    selectVersionFiles(id, version.id)
+    touch(id, {
+      ...input,
+      fileName: version.fileName,
+      filePath: version.filePath,
+      submittedVersionId: version.id,
+      status: 'ai_check',
+    })
+  })()
   return { application: getApplication(id)! }
 }
 
@@ -362,10 +409,26 @@ export function decideApplication(
   return { application: getApplication(id)! }
 }
 
-export function readApplicationFile(id: string) {
+export function readApplicationFile(id: string, index = 0) {
   const row = findRow(id)
   if (!row) return undefined
+  const entry = connection().prepare<[string, number], { name: string; path: string }>(
+    'select name, path from application_file where applicationId = ? and position = ?',
+  ).get(id, index)
+  if (entry) return { name: entry.name, data: readFileSync(entry.path) }
+  if (index !== 0) return undefined
   return { name: row.fileName, data: readFileSync(row.filePath) }
+}
+
+export function readApplicationFiles(id: string) {
+  const rows = connection().prepare<[string], { name: string; path: string }>(
+    'select name, path from application_file where applicationId = ? order by position',
+  ).all(id)
+  if (!rows.length) {
+    const first = readApplicationFile(id)
+    return first ? [first] : []
+  }
+  return rows.map(row => ({ name: row.name, data: readFileSync(row.path) }))
 }
 
 export function forViewer(

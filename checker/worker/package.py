@@ -43,7 +43,7 @@ def package_checks(docs: list[dict], photos: list[dict]) -> list[dict]:
     # PKG-01: адрес
     addrs = [(d, (d["report"].get("summary") or {}).get("address")) for d in done]
     known = [(d, a, normalize_address(a)) for d, a in addrs if a and normalize_address(a)]
-    missing = [d["file"] for d, a in addrs if not a]
+    missing = [d["file"] for d, a in addrs if not a or not normalize_address(a)]
     item = {"rule": "PKG-01", "title": "Адрес объекта одинаковый во всех документах пакета",
             "ref": "Документы одной заявки должны относиться к одному объекту"}
     if len(done) < 2:

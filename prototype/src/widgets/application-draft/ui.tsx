@@ -94,14 +94,14 @@ export function DraftEditor({
   })
 
   const runCheck = async () => {
-    const errors = await form.validateField('file', 'submit')
+    const errors = await form.validateField('files', 'submit')
     const values = form.state.values as DraftValues
-    if (errors.length || !values.file) return
+    if (errors.length || !values.files.length) return
     const updated = await checkVersion
-      .mutateAsync({ values, file: values.file })
+      .mutateAsync({ values, files: values.files })
       .catch(() => undefined)
     if (!updated) return
-    form.setFieldValue('file', null)
+    form.setFieldValue('files', [])
     if (!application) onCreated(updated)
   }
 
@@ -131,12 +131,12 @@ export function DraftEditor({
           <div ref={fileZone} className="flex flex-col gap-5">
             <DraftFields form={form} fileKey={String(versions.length)} />
           </div>
-          <form.Subscribe selector={state => state.values.file}>
+          <form.Subscribe selector={state => state.values.files}>
             {file => (
               <Button
                 type="button"
                 className="self-start"
-                disabled={!file || checkVersion.isPending}
+                disabled={!file.length || checkVersion.isPending}
                 aria-busy={checkVersion.isPending}
                 onClick={() => void runCheck()}
               >

@@ -31,18 +31,18 @@ async function upstream<T>(url: string, init?: RequestInit): Promise<T> {
   return body
 }
 
-export async function startCheck(file: File) {
+export async function startCheck(files: File[], documentType: string) {
   const form = new FormData()
-  form.append('files', file, file.name)
+  for (const file of files) form.append('files', file, file.name)
   const { uploads } = await upstream<{
     uploads: Array<{ id: string; name: string; kind: string }>
   }>(`${FILES_URL}/uploads`, { method: 'POST', body: form })
-  const pdf = uploads.find(upload => upload.kind === 'pdf')
-  if (!pdf) throw new UpstreamError(400, 'invalid_file')
+  const pdfs = uploads.filter(upload => upload.kind === 'pdf')
+  if (pdfs.length !== files.length) throw new UpstreamError(400, 'invalid_file')
   const pkg = await upstream<{ id: string }>(`${BACKEND_URL}/api/packages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ uploads: [pdf], title: file.name }),
+    body: JSON.stringify({ uploads: pdfs, title: files[0].name, service_type: documentType }),
   })
   return pkg.id
 }
@@ -100,24 +100,26 @@ export async function readCheck(packageId: string): Promise<CheckStatus> {
   const pkg = await upstream<{ state: string; documents: PackageDocument[] }>(
     `${BACKEND_URL}/api/packages/${packageId}`,
   )
-  const document = pkg.documents[0]
+  const document = pkg.documents.find(doc => doc.state !== 'done') ?? pkg.documents[0]
   const base = {
     state: document?.state ?? pkg.state,
     stage: document?.stage ?? '',
     progress: document?.progress ?? 0,
   }
-  if (!document || document.state !== 'done') return { ...base, result: null }
-  const run = await upstream<CheckRun>(
-    `${BACKEND_URL}/api/checks/${document.id}`,
-  )
+  if (!document || pkg.documents.some(doc => doc.state !== 'done')) return { ...base, result: null }
+  const runs = await Promise.all(pkg.documents.map(doc => upstream<CheckRun>(
+    `${BACKEND_URL}/api/checks/${doc.id}`,
+  )))
+  const run = runs[0]
+  const findings = runs.flatMap(run => run.report?.findings ?? [])
   return {
     ...base,
     result: {
       checkId: document.id,
       documentKind:
         run.report?.document_kind === 'signage' ? 'signage' : 'passport',
-      verdict: run.report?.verdict ?? 'pass',
-      findings: (run.report?.findings ?? [])
+      verdict: runs.some(run => run.report?.verdict === 'fail') ? 'fail' : run.report?.verdict ?? 'pass',
+      findings: findings
         .filter(f => f.severity === 'error' || f.severity === 'warning')
         .map(f => ({
           rule: f.rule,

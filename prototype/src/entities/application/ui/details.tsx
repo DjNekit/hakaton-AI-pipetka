@@ -42,14 +42,15 @@ export function ApplicationProperties({
         {formatDateTime(application.updatedAt)}
       </Row>
       <Row label={t('application.fields.file')}>
-        <a
-          href={applicationFileUrl(application.id)}
+        {(application.files?.length ? application.files : [{ name: application.fileName, index: 0 }]).map(file => <a
+          key={file.index}
+          href={applicationFileUrl(application.id, file.index)}
           target="_blank"
           rel="noreferrer"
-          className="underline underline-offset-4"
+          className="block underline underline-offset-4"
         >
-          {application.fileName}
-        </a>
+          {file.name}
+        </a>)}
       </Row>
     </dl>
   )

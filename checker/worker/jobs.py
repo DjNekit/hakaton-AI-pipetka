@@ -20,6 +20,7 @@ from colorpass.pipeline import run_check, template_conclusion
 
 from . import storage
 from .package import package_checks
+from .checklist import review_package
 from .redisq import READY, Redis, progress_key, result_key
 from .storage import BadRequest, NotFound
 
@@ -68,9 +69,40 @@ def check_package(r: Redis, args: dict) -> None:
 
     docs = []
     for d in args["documents"]:
-        docs.append(_check_document(r, pkg, d))
+        docs.append(_check_document(r, pkg, d, args.get("service_type")))
 
-    checks = package_checks(docs, photos)
+    combined = None
+    service_type = args.get("service_type")
+    if service_type in ("passport", "signage") and docs and all(d["state"] == "done" for d in docs):
+        import pypdfium2 as pdfium
+
+        merged = pdfium.PdfDocument.new()
+        source_pages = []
+        try:
+            for d in docs:
+                source = pdfium.PdfDocument(str(storage.doc_dir(d["doc_id"]) / "input.pdf"))
+                try:
+                    source_pages.extend({"document_id": d["doc_id"], "file": d["file"], "page": i + 1}
+                                        for i in range(len(source)))
+                    merged.import_pages(source)
+                finally:
+                    source.close()
+            merged.save(str(pdir / "input.pdf"))
+        finally:
+            merged.close()
+        try:
+            report = run_check(pdir / "input.pdf", pdir / "combined", write_images=False)
+        except Exception as exc:  # noqa: BLE001 — пакет должен завершиться и сообщить об ошибке
+            log.exception("Не удалось проверить сводный документ пакета %s", pkg)
+            report = {"document_kind": service_type, "checklist": [], "findings": [],
+                      "error": f"{type(exc).__name__}: {exc}"}
+        combined = {"doc_id": pkg, "file": "Сводный документ пакета", "report": report,
+                    "source_pages": source_pages}
+    checks = package_checks(docs, photos) + review_package(docs, service_type, combined)
+    if combined and combined["report"].get("error"):
+        checks.append({"rule": "PKG-04", "title": "Проверка сводного документа пакета", "ref": "",
+                       "status": "fail", "note": combined["report"]["error"]})
+    storage.write_json(pdir / "report.json", {"id": pkg, "checks": checks})
     publish(r, f"pkg:{pkg}", {
         "id": pkg,
         "finished_at": now(),
@@ -79,7 +111,7 @@ def check_package(r: Redis, args: dict) -> None:
     })
 
 
-def _check_document(r: Redis, pkg: str, d: dict) -> dict:
+def _check_document(r: Redis, pkg: str, d: dict, service_type: str | None = None) -> dict:
     doc_id = d["doc_id"]
     ddir = storage.doc_dir(doc_id, must_exist=False)
     ddir.mkdir(parents=True, exist_ok=True)
@@ -104,7 +136,7 @@ def _check_document(r: Redis, pkg: str, d: dict) -> dict:
         def progress(stage: str, frac: float) -> None:
             r.hset(pkey, {"stage": stage, "progress": round(frac, 3)})
 
-        report = run_check(ddir / "input.pdf", ddir, progress=progress)
+        report = run_check(ddir / "input.pdf", ddir, progress=progress, service_type=service_type)
         status = {
             "state": "done", "stage": "Готово", "progress": 1.0, "started_at": started, "finished_at": now(),
             "seconds": round(time.time() - t0, 1), "verdict": report["verdict"], "counts": report["counts"],
@@ -138,6 +170,7 @@ def rules(args: dict) -> dict:
         "required_sections": r["required_sections"],
         "required_general_fields": r["required_general_fields"],
         "allowed_scales": r["allowed_scales"],
+        "package_checklists": r["package_checklists"],
     }
 
 

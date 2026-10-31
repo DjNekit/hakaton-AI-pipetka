@@ -87,13 +87,14 @@ async function readUpload(request: Request) {
     address: text(form.get('address')),
     description: text(form.get('description')),
   })
-  const file = form.get('file')
+  const files = [...form.getAll('files'), ...form.getAll('file')]
+  const file = files[0]
   if (!fields.success) return { error: 'invalid_fields' as const }
-  if (!(file instanceof File) || file.type !== 'application/pdf') {
+  if (!files.length || files.length > 20 || files.some(file => !(file instanceof File) || file.type !== 'application/pdf')) {
     return { error: 'invalid_file' as const }
   }
-  if (file.size > MAX_FILE_SIZE) return { error: 'file_too_large' as const }
-  return { fields: fields.data, file }
+  if (files.some(file => (file as File).size > MAX_FILE_SIZE)) return { error: 'file_too_large' as const }
+  return { fields: fields.data, file: file as File, files: files as File[] }
 }
 
 function upstreamError(error: unknown) {
@@ -118,8 +119,8 @@ app.post('/applications/drafts', async c => {
   const upload = await readUpload(c.req.raw)
   if (upload.error) return jsonError(400, upload.error)
   try {
-    const packageId = await startCheck(upload.file)
-    const draft = await createDraft(user, upload.fields, upload.file, packageId)
+    const packageId = await startCheck(upload.files, upload.fields.documentType)
+    const draft = await createDraft(user, upload.fields, upload.file, packageId, upload.files.slice(1))
     return c.json(forViewer(user, draft), 201)
   } catch (error) {
     return upstreamError(error)
@@ -133,12 +134,13 @@ app.post('/applications/:id/versions', async c => {
   const upload = await readUpload(c.req.raw)
   if (upload.error) return jsonError(400, upload.error)
   try {
-    const packageId = await startCheck(upload.file)
+    const packageId = await startCheck(upload.files, upload.fields.documentType)
     const draft = await addVersion(
       owned.application.id,
       upload.fields,
       upload.file,
       packageId,
+      upload.files.slice(1),
     )
     return c.json(forViewer(owned.user, draft), 201)
   } catch (error) {
@@ -218,7 +220,7 @@ app.get('/applications/:id/checklist', async c => {
   if (user.role === 'applicant') return jsonError(403, 'forbidden')
   const application = getApplication(c.req.param('id'))
   if (!application) return jsonError(404, 'not_found')
-  return c.json(checklistFor(application.documentType))
+  return c.json(await checklistFor(application.documentType))
 })
 
 app.post('/applications/:id/approver-review', async c => {
@@ -232,7 +234,7 @@ app.post('/applications/:id/approver-review', async c => {
   )
   if (!body.success) return jsonError(400, 'invalid_fields')
   const answers = new Map(body.data.items.map(item => [item.id, item]))
-  const checklist = checklistFor(application.documentType)
+  const checklist = await checklistFor(application.documentType)
   if (checklist.some(item => !answers.has(item.id))) {
     return jsonError(400, 'incomplete_checklist')
   }
@@ -274,7 +276,9 @@ app.get('/applications/:id/file', async c => {
   if (!application || !canAccess(user, application)) {
     return jsonError(404, 'not_found')
   }
-  const file = readApplicationFile(c.req.param('id'))
+  const index = Number(c.req.query('index') ?? 0)
+  if (!Number.isInteger(index) || index < 0) return jsonError(400, 'invalid_fields')
+  const file = readApplicationFile(c.req.param('id'), index)
   if (!file) return jsonError(404, 'not_found')
   return new Response(new Uint8Array(file.data), {
     headers: {
@@ -322,6 +326,12 @@ if (migrations.toBeCreated.length || migrations.toBeAdded.length) {
 }
 
 const port = Number(process.env.PORT ?? 3100)
+for (const application of listApplications()) {
+  if ((application.status === 'ai_check' || application.status === 'review') &&
+      (!application.aiReview || application.aiReview.state === 'running')) {
+    void runAiReview(application.id)
+  }
+}
 serve({ fetch: app.fetch, port }, () => {
   console.log(`applications-api: http://0.0.0.0:${port}/new/api, chat ${CHAT_URL}`)
 })
