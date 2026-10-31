@@ -8,6 +8,12 @@ MVP для хакатона «Архитектура цифрового горо
 
 ## Что умеет
 
+**Пакет документов одной заявки**: загрузите сразу всё, что пришло по объекту, — PDF паспорта колористического
+решения, дизайн-проекта вывесок и фото фасада (JPEG, PNG). Каждый документ проверяется своими правилами, у каждого
+свой отчёт; общий вердикт пакета — худший из документов и **сверки документов между собой**: PKG-01 адрес объекта
+одинаковый во всех документах, PKG-02 все документы проверены, PKG-03 нет повторяющихся файлов. Фото пакета
+сразу доступны для сравнения с развёртками.
+
 **Два вида документов** — сервис сам определяет, что загружено:
 
 - **Паспорт колористического решения** (ПП Москвы № 114-ПП) — 22 проверки: комплектность разделов I–V и всех
@@ -28,20 +34,20 @@ MVP для хакатона «Архитектура цифрового горо
 **Сравнение фото с графической частью** (вкладка «Сравнение с фото»): развёртка, чертёж или фотомонтаж из документа
 против своего фото или фото из фотофиксации. Углы фасада на фото можно найти автоматически (по линиям фасада)
 и поправить мышью. Программа выравнивает фото, сравнивает цвет каждой зоны по ΔE00 с поправкой на экспозицию,
-строит карту отличий и выносит вердикт. Мультимодальная модель описывает отличия словами (вывески, кондиционеры,
-проёмы), но вердикт не меняет.
+строит карту отличий и выносит вердикт. Мультимодальная модель (сервис `chat`) описывает отличия словами
+(вывески, кондиционеры, проёмы); вердикт считает код — модель может только поднять «совпадает» до «требует внимания».
 
 ![Сравнение фото с развёрткой: карта отличий, цвета зон, вывод](docs/screenshot-photo.png)
 
-**Языковые модели**: основная — **Gemma 4** в LM Studio на ноутбуке разработчика (понимает текст и фото, прод
-обращается к ней через ngrok), запасная — **GigaChat API** (облако Сбера). Модель разбирает пояснительную записку,
-пишет заключение и описание отличий на фото. Модель — помощник, а не судья: все решения «соответствует / нет»
-принимает код по `rules.yaml`, ответы модели сверяются с исходным текстом. Нет ни одной модели — всё работает
-на правилах.
+**Языковая модель — GigaChat API (облако Сбера), только в сервисе `chat`**. Бэкенд и processor к модели не обращаются:
+проверка документа, разбор пояснительной записки и сравнение фото — правила и код. Сервис `chat` отвечает на вопросы
+по отчёту, по кнопке формулирует заключение и описывает отличия на фото, а результат сохраняет в бэкенд через его
+API. Модель — помощник, а не судья: решения «соответствует / нет» принимает код по `rules.yaml`. Без ключа GigaChat
+всё, кроме чата и текстов модели, работает.
 
 **Отчёт**: штамп-вердикт, каждое замечание выделено на листе, колеры «заявлено / фактически» с ΔE, таблица отделки
-или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md). История проверок
-и сравнений — в **PostgreSQL**, файлы отчётов — в `./runs`.
+или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md, Excel). Журнал пакетов,
+отчёты, решения и сравнения — в **PostgreSQL**, файлы документов — у сервиса `processor` в `./runs`.
 
 ## Запуск
 
@@ -49,8 +55,8 @@ MVP для хакатона «Архитектура цифрового горо
 
 | Файл | Для чего | Что запускает |
 |---|---|---|
-| `compose.yml` | локальная разработка | Django `runserver` и Vite с автоперезагрузкой (код смонтирован), PostgreSQL |
-| `compose.prod.yml` | сервер | сборка образов: gunicorn, Caddy (собранный фронтенд, HTTPS, прокси `/api`), PostgreSQL |
+| `compose.yml` | локальная разработка | Django `runserver`, Vite, processor, chat (код смонтирован), Redis, PostgreSQL |
+| `compose.prod.yml` | сервер | сборка образов: gunicorn, processor, chat, Caddy (собранный фронтенд, HTTPS, прокси), Redis, PostgreSQL |
 
 ### Локально
 
@@ -62,9 +68,14 @@ docker compose down                           # остановить (данны
 
 | Сервис | Что внутри | Порт |
 |---|---|---|
-| `frontend` | Vite dev server, `/api` проксируется на backend | 5173 (`COLORPASS_PORT`) |
-| `backend` | Django `runserver` + ядро проверки, tesseract, сертификаты НУЦ Минцифры | 127.0.0.1:8000 |
-| `db` | PostgreSQL 16: проверки, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
+| `frontend` | Vite dev server: `/api` → backend, `/files` → processor, `/chat` → chat | 5173 (`COLORPASS_PORT`) |
+| `backend` | Django `runserver`: API, журнал пакетов, отчёты, решения; файлов и PDF не касается | 127.0.0.1:8000 |
+| `processor` | проверка PDF (tesseract, OpenCV), листы, сравнение фото, Excel, файлы `runs/`; задачи — из Redis | 127.0.0.1:8001 |
+| `chat` | языковая модель GigaChat API: Node + TanStack AI; чат, заключение, описание фото | 127.0.0.1:3000 |
+| `redis` | очередь задач backend → processor и готовые результаты | 127.0.0.1:6379 |
+| `db` | PostgreSQL 16: пакеты, документы с отчётами, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
+
+Код processor после правок подхватывается перезапуском: `docker compose restart processor`.
 
 ### Прод: https://ai-pipetka.fun
 
@@ -73,62 +84,45 @@ docker compose down                           # остановить (данны
 
 Секреты репозитория (Settings → Secrets and variables → Actions): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`
 (публичная часть ключа — в `~/.ssh/authorized_keys` на сервере), `GIGACHAT_AUTH_KEY`, `POSTGRES_PASSWORD`,
-`DJANGO_SECRET_KEY`, для локальной модели — `LOCAL_LLM_URL`, `LOCAL_LLM_KEY` (секреты) и `LOCAL_LLM_MODEL`
-(переменная). Для HTTPS нужны A-запись `ai-pipetka.fun` → IP сервера и открытые порты 80 и 443.
+`DJANGO_SECRET_KEY`. Для HTTPS нужны A-запись `ai-pipetka.fun` → IP сервера и открытые порты 80 и 443.
 Docker на сервере ставится при первом деплое, если его нет.
 
 На сервере вручную: `cd /opt/colorpass && docker compose -f compose.prod.yml logs -f` (логи),
 `docker compose -f compose.prod.yml ps` (состояние).
 
-### GigaChat API
+### Языковая модель: GigaChat API (сервис `chat`)
 
-В `.env`: `GIGACHAT_AUTH_KEY=<ключ авторизации>`, при необходимости `GIGACHAT_MODEL` (по умолчанию `GigaChat-2-Max`,
-понимает изображения) и `GIGACHAT_SCOPE` (`GIGACHAT_API_PERS` для физлиц, `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP`).
-Ключ — Base64 от «Client ID:Client Secret» из личного кабинета developers.sber.ru; храните его только в `.env`
-(файл не попадает в git и в образы). Токен (30 мин) сервис получает и обновляет сам, изображения передаёт через
-загрузку файлов GigaChat. Сертификат НУЦ Минцифры ставится в образ при сборке; если сборка без доступа
-к gu-st.ru — `GIGACHAT_VERIFY_SSL=0` (только для отладки). Статус модели — в правом верхнем углу интерфейса.
+Всё, что связано с моделью, — в сервисе `chat/` (Node 22, Hono, [TanStack AI](https://tanstack.com/ai)). Данные
+проверок `chat` берёт из бэкенда по HTTP (`BACKEND_URL`), картинки — у processor (`FILES_URL`), а ответы модели
+сохраняет в бэкенд (`POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`).
+Доступен ли GigaChat — в правом верхнем углу интерфейса.
 
-### Gemma 4 в LM Studio через ngrok (основная модель)
+Что делает модель:
+- **Чат по отчёту** — кнопка «Спросить ИИ». Инспектор спрашивает «почему TAB-02 — ошибка?», «что исправить
+  заявителю?», модель отвечает по данным этой проверки (замечания, чек-лист, заключение передаются в промпте).
+  id замечаний в ответе — ссылки: нажатие показывает замечание на листе. Хук `useChat` из `@tanstack/ai-react` —
+  `frontend/src/components/ChatPanel.jsx`.
+- **Заключение** — кнопка «Сформулировать моделью» на вкладке «Заключение». По умолчанию заключение составляется
+  по шаблону; исключили замечание — заключение снова пересчитывается по шаблону.
+- **Описание отличий на фото** — сразу после сравнения (и кнопкой «описать моделью»).
 
-Порядок выбора модели при каждой проверке: Gemma в LM Studio (если задан `LOCAL_LLM_URL` и она отвечает) →
-GigaChat API → только правила. Если Gemma отвалилась посреди проверки, запрос повторяется в GigaChat. Какая модель
-работает сейчас — в правом верхнем углу: «Локальная модель: …» или «GigaChat: …».
-
-**Локально** (`compose.yml`) достаточно запустить сервер LM Studio на этом же компьютере (порт 1234) — backend найдёт
-его сам по `http://host.docker.internal:1234/v1`.
-
-**Для прода** модель запускает один человек на своём ноутбуке, остальные пользуются ею через сайт.
-
-1. LM Studio 0.4 или новее → скачать **Gemma 4 12B** (Q4, ~8 ГБ; для Mac с 24 ГБ — оптимально; есть память —
-   26B A4B). Developer → Start Server (порт 1234).
-2. Токен LM Studio не обязателен. Без него любой, кто узнает адрес ngrok, сможет пользоваться моделью; если нужно
-   закрыть — Server Settings → Require Authentication → Create Token и секрет `LOCAL_LLM_KEY`.
-3. ngrok: зарегистрироваться на ngrok.com, `ngrok config add-authtoken <токен ngrok>`, в Dashboard → Domains взять
-   бесплатный постоянный домен и держать открытым:
-   ```bash
-   ngrok http 1234 --url=https://<домен>.ngrok-free.app
-   ```
-4. Проверка с любого компьютера:
-   ```bash
-   curl https://<домен>.ngrok-free.app/v1/models
-   ```
-5. В GitHub, окружение `production`: секрет `LOCAL_LLM_URL=https://<домен>.ngrok-free.app/v1`, переменная `LOCAL_LLM_MODEL=<идентификатор Gemma из LM Studio>`
-   (например `google/gemma-4-12b`) → перезапустить деплой (Actions → deploy → Run workflow).
-
-Закрыли ngrok или LM Studio, уснул ноутбук — следующая проверка на проде пойдёт в GigaChat, перезапуск не нужен.
-Домен постоянный, поэтому секрет задаётся один раз.
+Настройка: в `.env` — `GIGACHAT_AUTH_KEY=<ключ авторизации>` (Base64 от «Client ID:Client Secret» из личного
+кабинета developers.sber.ru), при необходимости `GIGACHAT_MODEL` (по умолчанию `GigaChat-2-Max`, понимает
+изображения) и `GIGACHAT_SCOPE` (`GIGACHAT_API_PERS` для физлиц, `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP`).
+Ключ храните только в `.env`; на сервере его пишет CI из секрета `GIGACHAT_AUTH_KEY`. Токен (30 мин) сервис получает
+и обновляет сам, изображения передаёт через загрузку файлов GigaChat. Сертификаты НУЦ Минцифры ставятся в образ
+`chat` при сборке (`NODE_EXTRA_CA_CERTS`).
 
 ### Команды внутри контейнера
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real`; `--llm` — с моделью |
-| `docker compose exec backend python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
-| `docker compose exec backend python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
-| `docker compose exec backend python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
-| `docker compose exec backend python -m colorpass llm-status` | какая модель отвечает: Gemma в LM Studio или GigaChat API |
-| `docker compose exec db psql -U colorpass -c "select file, verdict, errors from checks"` | история проверок в базе |
+| `docker compose exec processor python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
+| `docker compose exec processor python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
+| `docker compose exec processor python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
+| `docker compose exec processor python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
+| `docker compose exec db psql -U colorpass -c "select title, verdict from packages"` | журнал пакетов в базе |
+| `docker compose exec redis redis-cli llen cp:jobs` | сколько пакетов ждёт в очереди |
 
 ## Качество
 
@@ -150,18 +144,29 @@ GigaChat API → только правила. Если Gemma отвалилас�
 ## Как это устроено
 
 ```
-PDF ──► ingest ──► вид документа ──► extract / signage ──► checks / signage ──► report ──► Django API ──► React UI
-        текст,      паспорт или        листы, таблица        rules.yaml:            JSON, листы,     │
-        таблицы,    дизайн-проект      отделки, записка,     114-ПП, 902-ПП, АХК    заключение       ├─► PostgreSQL
-        векторы,                       экспликация вывесок                                           │   (история)
-        рендер                                                                                       └─► runs/ (файлы)
-фото ──► photo: развёртка/фотомонтаж ↔ фото, углы фасада, ΔE00 по зонам, карта отличий, вердикт
-Gemma 4 (LM Studio через ngrok), запасная — GigaChat API: разбор записки, заключение, описание отличий на фото
+браузер ──► /files/uploads ──► processor: файлы пакета (PDF, фото) → runs/uploads
+        ──► POST /api/packages ──► backend: пакет и документы в PostgreSQL ──► Redis cp:jobs ──┐
+                                                                                              ▼
+processor (воркеры): ingest ──► вид документа ──► extract / signage ──► checks ──► отчёт, листы, развёртки
+                     текст, таблицы, рендер, OCR    паспорт / вывески    rules.yaml: 114-ПП, 902-ПП, АХК
+                     после всех документов — сверка пакета (PKG-01…03) ──► Redis cp:result:* ──► backend → база
+быстрые операции с файлами (развёртки, углы, сравнение фото, пересчёт листов, Excel): backend ──► Redis cp:rpc ──► processor
+chat (TanStack AI) ──► GigaChat API: чат по отчёту, заключение, описание отличий на фото
+     данные — GET /api/checks/{id}; картинки — /files; ответы модели — POST /api/checks/{id}/conclusion, …/review
 ```
 
+Бэкенд хранит в базе всё, что видит и меняет инспектор (пакеты, отчёты, исключённые замечания, решения,
+заключения модели), и не касается файлов. Processor хранит файлы и делает всё, что требует PDF и изображений.
+Связь — очередь Redis: проверки пакетов не теряются при перезапуске и масштабируются числом воркеров
+(`COLORPASS_WORKERS`); готовые отчёты бэкенд забирает из Redis в базу при первом обращении.
+
 ```
-backend/
-  colorpass/            ядро (не зависит от Django)
+backend/                Django 4.2: /api/* — пакеты, документы, решения, ответы модели
+  core/service.py       пакеты, синхронизация результатов, пересчёт через processor, решения, архив
+  core/store.py         PostgreSQL (DATABASE_URL); без базы — в памяти процесса (для разработки)
+  core/redisq.py        клиент Redis и формат очередей (копия processor/worker/redisq.py)
+processor/
+  colorpass/            ядро проверки (не зависит от веба)
     ingest.py           чтение PDF, рендер, OCR сканов
     extract.py          паспорт: классификация листов, модель паспорта, выноски
     signage.py          дизайн-проект вывесок: листы, экспликация, 11 проверок по 902-ПП
@@ -170,26 +175,39 @@ backend/
     color.py            sRGB↔Lab, CIEDE2000, кластеризация
     graphics.py         цвет по выноскам, образцы, палитра развёртки, остекление
     photo.py            развёртки и фото на листах, углы фасада, выравнивание, сравнение, карта отличий
-    textmatch.py        разбор записки правилами (резерв модели)
-    llm.py, llm_tasks.py  клиенты LM Studio и GigaChat API, выбор модели, промпты, валидация ответов
+    textmatch.py        разбор пояснительной записки правилами
     checks.py           22 проверки паспорта
     pipeline.py         полный цикл, отчёт, изображения
-    store.py            история в PostgreSQL (DATABASE_URL); без базы — файлы
-    service.py          фоновые проверки, сравнения, файлы для веб-API
+    excel.py            выгрузка чек-листа и заключения в XLSX
     evaluate.py         метрики на размеченных документах и сравнениях фото
     data/rules.yaml     формализованные требования и пороги
-  api/, config/         Django 4.2: /api/*
-  devserver.py          тот же API без Django
-frontend/               React 18 + Vite
+  worker/               сервис: воркеры очереди (jobs.py), сверка пакета (package.py), файлы и загрузки
+                        по HTTP (fileserver.py), раскладка runs/ (storage.py)
+frontend/               React 18 + Vite; пакет — components/PackageView.jsx, чат — components/ChatPanel.jsx
+chat/                   языковая модель: TanStack AI + Hono (server.js, llm.js — GigaChat API, tasks.js —
+                        заключение и описание фото, prompt.js — промпт чата с данными проверки)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```
 
-API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples/{name}/check?llm=1`,
-`POST /api/checks` (multipart `file`, `llm`), `GET /api/checks`, `GET /api/checks/{id}`,
-`GET /api/checks/{id}/files/{path}`; сравнение фото: `GET /api/checks/{id}/blocks` (развёртки, чертежи,
-фотомонтаж и фото документа), `POST /api/checks/{id}/corners` (подсказка углов фасада: `photo` или `photo_block`),
-`POST /api/checks/{id}/comparisons` (multipart `facade`, `photo` или `photo_block`, `quad` — 4 угла `[[x, y], …]`,
-`rect` — часть развёртки в долях, `llm`), `GET /api/checks/{id}/comparisons`.
+API бэкенда (JSON):
+- пакеты: `POST /api/packages` (`uploads` — ответ processor на загрузку, `samples` — имена образцов, `title`),
+  `GET /api/packages`, `GET /api/packages/{id}` (документы, ход проверки, сверка, фото), `POST /api/samples/{name}/check`;
+- документ: `GET /api/checks/{id}` (статус + отчёт), `GET /api/checks/{id}/report.json`, `…/conclusion.md`,
+  `…/export.xlsx` (перенаправляет на файл processor);
+- замечания: `POST /api/checks/{id}/change_status` (`finding_id`, `action` — `dismiss`/`restore`/`delete`, `reason`) —
+  processor пересчитывает вердикт, чек-лист, заключение и листы с рамками;
+- решение: `POST /api/checks/{id}/decision` (`decision` — `accepted`/`rejected`, `note`); через 30 дней файлы
+  документа уходят в архив processor (`runs/archive/`), ссылки работают;
+- сравнение фото: `GET /api/checks/{id}/blocks`, `POST /api/checks/{id}/corners` (`upload_id` или `photo_block`),
+  `POST /api/checks/{id}/comparisons` (`facade`, `upload_id` или `photo_block`, `quad`, `rect`), `GET …/comparisons`;
+- ответы модели (присылает `chat`): `POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`;
+- `GET /api/health` — база, Redis, жив ли processor; `GET /api/rules`, `GET /api/samples`.
+
+Processor: `POST /files/uploads` (multipart `files`, можно несколько), `GET /files/{doc}/{путь}` (листы, развёртки,
+карты отличий, Excel; `package/…` — фото пакета), `GET /files/samples/{имя}.pdf`.
+
+Сервис `chat`: `POST /chat/checks/{id}` (диалог, поток AG-UI для `useChat`), `POST /chat/checks/{id}/conclusion`,
+`POST /chat/checks/{id}/comparisons/{cid}/review`, `GET /chat/health` (доступен ли GigaChat).
 
 ## Ограничения MVP
 
@@ -204,8 +222,8 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 - Номера пунктов 114-ПП взяты из выдержек; форма паспорта (прил. 3, разделы I–III) сверена с текстом на garant.ru,
   пункты требований к проекту — сверить с редакцией 718-ПП от 03.04.2025 перед защитой.
 - ПП № 94-ПП от 02.02.2022 из карточки кейса пока не учтён — уточнить у ментора.
-- GigaChat API проверен на имитации сервера: из среды разработки сервер Сбера недоступен, первый настоящий запрос —
-  в Docker на вашем компьютере.
+- GigaChat API в сервисе `chat` проверен на имитации сервера; вызовы TanStack AI написаны по документации
+  версии 1.0 — первая настоящая сборка и запросы — в Docker на вашем компьютере.
 
 ## Вопросы ментору
 
@@ -213,3 +231,7 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 2. Отечественность обязательна только для языковых моделей или и для моделей распознавания изображений?
 3. Паспорта и дизайн-проекты с ошибками и эталонными заключениями, фото зданий после ремонта — для оценки точности.
 4. Каким способом организаторы будут считать «точность сравнения графической части с фото» (95 %).
+
+## Ссылка на чек-листы
+
+[Паспорт-Вывески-Изменение](https://disk.yandex.ru/i/eBGJOW0lNzTJYg "Переход по ссылке")

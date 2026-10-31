@@ -1,15 +1,19 @@
-"""Тонкий HTTP-слой над colorpass.service (вся логика — в сервисном слое)."""
+"""Тонкий HTTP-слой над core.service (вся логика — в сервисном слое).
+
+Файлы (листы, развёртки, загрузки, Excel) отдаёт и принимает сервис processor по /files/…; бэкенд работает
+только с данными: пакеты, отчёты, замечания, решения.
+"""
 from __future__ import annotations
 
 import functools
-import mimetypes
+import json
 
 from django.conf import settings
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.static import serve
 
-from colorpass import service
+from core import service
 
 _JSON = {"json_dumps_params": {"ensure_ascii": False}}
 
@@ -25,17 +29,28 @@ def api_view(methods: list[str]):
                 return JsonResponse({"error": "not_found", "detail": str(exc)}, status=404, **_JSON)
             except service.BadRequest as exc:
                 return JsonResponse({"error": "bad_request", "detail": str(exc)}, status=400, **_JSON)
+            except service.Unavailable as exc:
+                return JsonResponse({"error": "unavailable", "detail": str(exc)}, status=503, **_JSON)
 
         return wrapper
 
     return deco
 
 
-def _flag(request, name: str, default: bool = True) -> bool:
-    value = request.GET.get(name, request.POST.get(name))
-    if value is None:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
+def _data(request) -> dict:
+    """Тело запроса: JSON или обычная форма."""
+    if request.content_type == "application/json":
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise service.BadRequest("Ожидается JSON") from exc
+        if not isinstance(data, dict):
+            raise service.BadRequest("Ожидается JSON-объект")
+        return data
+    return request.POST.dict()
+
+
+# ---------------------------------------------------------------- справочные
 
 
 @api_view(["GET"])
@@ -50,77 +65,108 @@ def rules(request):
 
 @api_view(["GET"])
 def samples(request):
-    return JsonResponse({"samples": service.list_samples()}, **_JSON)
+    return JsonResponse({"samples": service.samples()}, **_JSON)
 
 
 @api_view(["GET"])
 def sample_pdf(request, name: str):
-    return FileResponse(open(service.sample_pdf(name), "rb"), content_type="application/pdf")
+    return HttpResponseRedirect(f"/files/samples/{name}.pdf")
 
 
 @api_view(["POST"])
 def sample_check(request, name: str):
-    return JsonResponse(service.start_sample(name, use_llm=_flag(request, "llm")), status=202, **_JSON)
+    return JsonResponse(service.start_sample(name), status=202, **_JSON)
+
+
+# ---------------------------------------------------------------- пакеты
 
 
 @api_view(["GET", "POST"])
-def checks(request):
+def packages(request):
     if request.method == "POST":
-        upload = request.FILES.get("file")
-        if upload is None:
-            raise service.BadRequest("Не передан файл (поле формы «file»)")
-        status = service.start_upload(upload.name, upload.read(), use_llm=_flag(request, "llm"))
-        return JsonResponse(status, status=202, **_JSON)
-    return JsonResponse({"checks": service.list_runs()}, **_JSON)
+        data = _data(request)
+        pkg = service.create_package(data.get("uploads"), data.get("samples"), data.get("title", ""))
+        return JsonResponse(pkg, status=202, **_JSON)
+    return JsonResponse({"packages": service.list_packages()}, **_JSON)
+
+
+@api_view(["GET"])
+def package_detail(request, package_id: str):
+    return JsonResponse(service.get_package(package_id), **_JSON)
+
+
+# ---------------------------------------------------------------- документы
 
 
 @api_view(["GET"])
 def check_detail(request, run_id: str):
-    return JsonResponse(service.get_run(run_id), **_JSON)
+    return JsonResponse(service.get_check(run_id), **_JSON)
+
+
+@api_view(["GET"])
+def check_report(request, run_id: str):
+    return JsonResponse(service.report_json(run_id), **_JSON)
+
+
+@api_view(["GET"])
+def check_conclusion_md(request, run_id: str):
+    resp = HttpResponse(service.conclusion_text(run_id), content_type="text/markdown; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="conclusion-{run_id}.md"'
+    return resp
+
+
+@api_view(["GET"])
+def check_export(request, run_id: str):
+    return HttpResponseRedirect(service.export_excel_url(run_id))
+
+
+@api_view(["POST"])
+def change_status(request, run_id: str):
+    d = _data(request)
+    return JsonResponse(service.change_finding_status(run_id, d.get("finding_id", ""), d.get("action", "dismiss"), d.get("reason", "")), **_JSON)
+
+
+@api_view(["POST"])
+def set_decision(request, run_id: str):
+    d = _data(request)
+    return JsonResponse(service.set_decision(run_id, d.get("decision", ""), d.get("note", "")), **_JSON)
+
+
+@api_view(["POST"])
+def check_conclusion(request, run_id: str):
+    """Заключение от модели — его присылает сервис chat."""
+    d = _data(request)
+    return JsonResponse(service.save_conclusion(run_id, d.get("text", ""), d.get("model", ""), d.get("provider", "")), **_JSON)
+
+
+# ---------------------------------------------------------------- сравнение фото
 
 
 @api_view(["GET"])
 def check_blocks(request, run_id: str):
-    return JsonResponse(service.list_blocks(run_id), **_JSON)
+    return JsonResponse(service.blocks(run_id), **_JSON)
 
 
 @api_view(["POST"])
 def check_corners(request, run_id: str):
-    upload = request.FILES.get("photo")
-    return JsonResponse(
-        service.suggest_corners(run_id, photo_bytes=upload.read() if upload else None, photo_block=request.POST.get("photo_block")),
-        **_JSON,
-    )
+    return JsonResponse(service.corners(run_id, _data(request)), **_JSON)
 
 
 @api_view(["GET", "POST"])
 def check_comparisons(request, run_id: str):
     if request.method == "POST":
-        upload = request.FILES.get("photo")
-        result = service.compare_photo(
-            run_id,
-            request.POST.get("facade", ""),
-            photo_bytes=upload.read() if upload else None,
-            photo_name=upload.name if upload else "",
-            photo_block=request.POST.get("photo_block"),
-            quad=request.POST.get("quad"),
-            rect=request.POST.get("rect"),
-            use_llm=_flag(request, "llm"),
-        )
-        return JsonResponse(result, status=201, **_JSON)
+        return JsonResponse(service.compare_photo(run_id, _data(request)), status=201, **_JSON)
     return JsonResponse({"comparisons": service.list_comparisons(run_id)}, **_JSON)
 
 
-@api_view(["GET"])
-def check_file(request, run_id: str, relpath: str):
-    path = service.run_file(run_id, relpath)
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    if path.suffix == ".md":
-        content_type = "text/markdown; charset=utf-8"
-    return FileResponse(open(path, "rb"), content_type=content_type)
+@api_view(["POST"])
+def comparison_review(request, run_id: str, cid: str):
+    """Описание отличий на фото от модели — его присылает сервис chat."""
+    d = _data(request)
+    return JsonResponse(service.save_photo_review(run_id, cid, d.get("review"), d.get("model", ""), d.get("provider", ""), d.get("error", "")), **_JSON)
 
 
-# ----------------------------------------------------------------- фронтенд (сборка frontend/dist)
+# ---------------------------------------------------------------- фронтенд (если собран и бэкенд открыт напрямую)
 
 
 def frontend_index(request):
@@ -128,8 +174,7 @@ def frontend_index(request):
     if not index.exists():
         return HttpResponse(
             "<h1>colorpass API работает</h1><p>Фронтенд не собран. Режим разработки: "
-            "<code>cd frontend &amp;&amp; npm install &amp;&amp; npm run dev</code> → http://localhost:5173. "
-            "Или соберите: <code>npm run build</code>.</p><p>API: <a href='/api/health'>/api/health</a></p>",
+            "<code>docker compose up</code> → http://localhost:5173.</p><p>API: <a href='/api/health'>/api/health</a></p>",
             content_type="text/html; charset=utf-8",
         )
     return FileResponse(open(index, "rb"), content_type="text/html; charset=utf-8")

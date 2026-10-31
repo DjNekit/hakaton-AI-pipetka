@@ -11,6 +11,30 @@ export const STATUS = {
   skip: { label: "Не применимо", tone: "muted" },
 };
 
+export const DECISION = {
+  accepted: { label: "Проверен и принят", short: "Принят", tone: "ok" },
+  rejected: { label: "Проверен и отклонён", short: "Отклонён", tone: "error" },
+};
+
+export function runStatus(run) {
+  if (run.archived_at) return { label: "В архиве", short: "Архив", title: "В архиве", tone: "muted" };
+  if (run.decision && DECISION[run.decision]) {
+    const decision = DECISION[run.decision];
+    return { label: decision.label, short: decision.short, title: decision.label, tone: decision.tone };
+  }
+  if (run.state === "error") return { label: "ошибка", short: "ошибка", title: "Ошибка проверки", tone: "error" };
+  if (run.state !== "done") return { label: "идёт проверка", short: "идёт проверка", title: "Идёт проверка", tone: "muted" };
+  const verdict = VERDICT[run.verdict] || { title: "", short: "", tone: "muted" };
+  return { label: verdict.short, short: verdict.short, title: verdict.title, tone: verdict.tone };
+}
+
+// Пакет: идёт проверка → общий вердикт (худший из документов и сверки документов между собой)
+export function packageStatus(pkg) {
+  if (pkg.state === "queued" || pkg.state === "running") return { short: "идёт проверка", title: "Идёт проверка", tone: "muted" };
+  const verdict = VERDICT[pkg.verdict];
+  return verdict ? { short: verdict.short, title: verdict.title, tone: verdict.tone } : { short: "проверен", title: "Проверен", tone: "muted" };
+}
+
 export const SEVERITY = {
   error: { label: "Ошибка", tone: "error" },
   warning: { label: "Предупреждение", tone: "warn" },
@@ -29,6 +53,11 @@ export function formatTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+export function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function sampleTitle(name) {

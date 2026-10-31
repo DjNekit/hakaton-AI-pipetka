@@ -1,11 +1,12 @@
 # Прод: образы собираются на сервере, наружу смотрит только Caddy (80/443, сертификат Let's Encrypt).
 #   docker compose -f compose.prod.yml up -d --build
 # Разворачивается автоматически при пуше в main (.github/workflows/deploy.yml); .env на сервере пишет CI.
+# Caddy: /api → backend, /files → processor, /chat → chat, остальное — собранный React.
 name: colorpass
 
 services:
   web:
-    build: ./frontend               # Caddy: собранный React, HTTPS (Let's Encrypt), прокси /api → backend
+    build: ./frontend               # Caddy: собранный React, HTTPS (Let's Encrypt), прокси на сервисы
     restart: always
     ports:
       - "80:80"
@@ -18,38 +19,66 @@ services:
       - caddy-config:/config
     depends_on:
       backend: { condition: service_healthy }
+      processor: { condition: service_started }
+      chat: { condition: service_started }
 
   backend:
-    build: ./backend                # gunicorn
+    build: ./backend                # gunicorn: API, база, журнал, решения
     restart: always
     environment:
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
-      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
-      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
-      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
       DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@db:5432/colorpass
+      REDIS_URL: redis://redis:6379/0
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "0"
       DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → backend
-      # основная модель — Gemma 4 в LM Studio на ноутбуке, открыта через ngrok (README → «Модели»);
-      # ноутбук выключен или туннель закрыт — GigaChat API
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-      LLM_TIMEOUT: "300"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
+
+  processor:
+    build: ./processor              # проверка PDF, OCR, листы, сравнение фото, Excel, файлы
+    restart: always
+    environment:
+      REDIS_URL: redis://redis:6379/0
       COLORPASS_WORKERS: "2"
+      COLORPASS_RPC_WORKERS: "4"
       COLORPASS_MAX_UPLOAD_MB: "100"
     volumes:
       - ./runs:/app/runs
       - ./dataset:/app/dataset
     depends_on:
-      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  chat:                             # языковая модель GigaChat (TanStack AI): чат, заключение, описание фото
+    build: ./chat
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:8000
+      FILES_URL: http://processor:8001/files
+      # языковая модель — GigaChat API; без ключа ИИ-функции недоступны, проверка по правилам работает
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
+      LLM_TIMEOUT: "300"
+    depends_on:
+      backend: { condition: service_healthy }
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]   # наружу порт не открыт
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/rules', timeout=5)"]
-      interval: 10s
-      timeout: 6s
-      retries: 12
-      start_period: 30s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   db:
     image: postgres:16-alpine
@@ -67,5 +96,6 @@ services:
 
 volumes:
   pgdata:
+  redis-data:
   caddy-data:
   caddy-config:

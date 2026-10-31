@@ -1,8 +1,8 @@
 // Экспликация вывесок дизайн-проекта (902-ПП): распознанные позиции, размеры и связанные замечания
-export default function Explication({ report, onSelect }) {
+export default function Explication({ report, findings, onSelect }) {
   const sg = report.signage;
   const byElement = {};
-  for (const f of report.findings) {
+  for (const f of findings || report.findings.filter((x) => !x.dismissed)) {
     if (f.element) (byElement[f.element] = byElement[f.element] || []).push(f);
   }
   const fmt = (v) => (v == null ? "—" : Math.round(v).toLocaleString("ru-RU"));

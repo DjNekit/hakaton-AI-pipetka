@@ -67,12 +67,11 @@ class RuleResult:
 
 
 class Context:
-    def __init__(self, doc: Document, passport: Passport, llm_mentions: list[Mention] | None = None):
+    def __init__(self, doc: Document, passport: Passport):
         self.doc = doc
         self.p = passport
         self.rules = load_rules()
         self.th = self.rules["thresholds"]
-        self.llm_mentions = llm_mentions
         self.mentions: list[Mention] = []
         self.mentions_source = "rules"
         self.swatches: dict[str, ColorSample] = {}
@@ -563,10 +562,7 @@ def check_note_vs_table(ctx: Context) -> RuleResult:
     res = RuleResult("TXT-01", "ok")
     if not ctx.p.note_text or not ctx.p.finish_rows:
         return RuleResult("TXT-01", "skip", note="Нет пояснительной записки или таблицы отделки")
-    if ctx.llm_mentions is not None:
-        ctx.mentions, ctx.mentions_source = ctx.llm_mentions, "llm"
-    else:
-        ctx.mentions, ctx.mentions_source = extract_mentions(ctx.p.note_text, ctx.p.finish_rows), "rules"
+    ctx.mentions, ctx.mentions_source = extract_mentions(ctx.p.note_text, ctx.p.finish_rows), "rules"
     note_page = ctx.p.note_pages[0] if ctx.p.note_pages else None
     reported: set[tuple] = set()
     for m in ctx.mentions:

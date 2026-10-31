@@ -1,5 +1,12 @@
-# Локальная разработка: код backend и frontend смонтирован в контейнеры, изменения подхватываются на лету.
+# Локальная разработка: код всех сервисов смонтирован в контейнеры.
 #   docker compose up --build       → интерфейс http://localhost:5173, API http://localhost:8000/api/health
+# Сервисы:
+#   frontend   React (Vite): /api → backend, /files → processor, /chat → chat
+#   backend    Django: API, PostgreSQL, журнал пакетов, решения инспектора; файлов не касается
+#   processor  проверка PDF, OCR, листы, сравнение фото, Excel, хранение файлов (runs/); задачи — из очереди Redis
+#   chat       языковая модель (GigaChat API): чат по отчёту, заключение, описание фото
+#   redis      очередь задач backend → processor и готовые результаты
+#   db         PostgreSQL
 # Прод — compose.prod.yml (сборка образов: gunicorn, Caddy со статикой и HTTPS).
 name: colorpass-dev
 
@@ -8,47 +15,80 @@ services:
     build: ./backend
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]   # автоперезагрузка при изменении кода
     environment:
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}      # GigaChat API — запасная модель; без ключа — проверка по правилам
-      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
-      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
-      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
       DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:-colorpass}@db:5432/colorpass
-      LLM_TIMEOUT: "300"
-      COLORPASS_WORKERS: "2"
-      COLORPASS_MAX_UPLOAD_MB: "100"
+      REDIS_URL: redis://redis:6379/0
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
-      # основная модель — Gemma 4 в LM Studio на этом компьютере (или чужая через ngrok); не отвечает — GigaChat API
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./backend:/app/backend    # код — с диска
-      - ./runs:/app/runs          # отчёты проверок
-      - ./dataset:/app/dataset    # размеченные паспорта и дизайн-проекты
     ports: ["127.0.0.1:${COLORPASS_API_PORT:-8000}:8000"]
     depends_on:
       db: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/rules', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
       interval: 10s
       timeout: 6s
       retries: 12
       start_period: 20s
 
+  processor:
+    build: ./processor
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      COLORPASS_WORKERS: "2"        # пакетов одновременно
+      COLORPASS_RPC_WORKERS: "4"    # быстрые операции: развёртки, углы, сравнение фото, Excel
+      COLORPASS_MAX_UPLOAD_MB: "100"
+    volumes:
+      - ./processor:/app/processor  # код — с диска (после правок: docker compose restart processor)
+      - ./runs:/app/runs            # файлы документов и пакетов
+      - ./dataset:/app/dataset      # образцы с разметкой
+    ports: ["127.0.0.1:${COLORPASS_FILES_PORT:-8001}:8001"]
+    depends_on:
+      redis: { condition: service_healthy }
+
   frontend:
     image: node:20-alpine
     working_dir: /app
-    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"]
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
     environment:
-      VITE_API_TARGET: http://backend:8000   # vite проксирует /api на backend
+      VITE_API_TARGET: http://backend:8000      # vite проксирует /api на backend
+      VITE_FILES_TARGET: http://processor:8001  # /files — на processor (загрузка и файлы документов)
+      VITE_CHAT_TARGET: http://chat:3000        # /chat — на сервис моделей
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules   # зависимости — в томе, не на диске Mac
     ports: ["${COLORPASS_PORT:-5173}:5173"]
     depends_on:
       backend: { condition: service_healthy }
+
+  chat:                         # языковая модель GigaChat (TanStack AI): чат, заключение, описание фото; данные — из backend
+    build: ./chat
+    command: ["node", "--watch", "src/server.js"]   # перезапуск при изменении кода
+    environment:
+      BACKEND_URL: http://backend:8000
+      FILES_URL: http://processor:8001/files
+      # языковая модель — GigaChat API; без ключа ИИ-функции недоступны, проверка по правилам работает
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
+      LLM_TIMEOUT: "300"
+    volumes:
+      - ./chat/src:/app/src       # код — с диска; зависимости — в образе (поменяли package.json — up --build)
+    ports: ["127.0.0.1:${COLORPASS_CHAT_PORT:-3000}:3000"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]   # очередь переживает перезапуск
+    volumes: ["redis-data:/data"]
+    ports: ["127.0.0.1:${COLORPASS_REDIS_PORT:-6379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   db:
     image: postgres:16-alpine
@@ -66,4 +106,5 @@ services:
 
 volumes:
   pgdata:
+  redis-data:
   frontend-node-modules:

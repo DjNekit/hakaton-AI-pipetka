@@ -15,8 +15,8 @@
 Регрессионные тесты — `backend/tests/test_real.py`, `backend/tests/test_llm.py`.
 
 ```bash
-docker compose exec backend python -m colorpass eval                                       # все размеченные паспорта
-docker compose exec backend python -m colorpass check ../dataset/real/<файл>.pdf --no-llm   # один файл, отчёт в runs/
+docker compose exec processor python -m colorpass eval                                     # все размеченные паспорта
+docker compose exec processor python -m colorpass check ../dataset/real/<файл>.pdf          # один файл, отчёт в runs/
 ```
 
 ## Сравнения фото: `*.photos.json`
@@ -49,5 +49,5 @@ id области вида `p12-b1`), фото (`photo` — фото из пас
 
 - ПП Москвы от 28.03.2012 № 114-ПП (ред. от 03.04.2025), mos.ru — требования к составу проекта и паспорта.
 - Паспорт колористического решения № 19/04406 (Москомархитектура, 2019), опубликован на moskvakadastr.ru.
-- Справочник RAL Classic (`backend/colorpass/data/ral_classic.csv`) — HEX-приближения по таблице w3schools «Colors RAL».
+- Справочник RAL Classic (`processor/colorpass/data/ral_classic.csv`) — HEX-приближения по таблице w3schools «Colors RAL».
   Это экранные приближения, а не колориметрические эталоны RAL; для промышленного использования заменить на лицензированные данные.

@@ -1,0 +1,9 @@
+# Ядро проверки документов и фото
+pdfplumber>=0.11
+pypdfium2>=4.30
+numpy>=1.24
+opencv-python-headless>=4.8
+Pillow>=10.0
+PyYAML>=6.0
+# OCR сканов: tesseract с русским языком установлен в Docker-образе; без него коды берутся из OCR-слоя PDF
+pytesseract>=0.3.10

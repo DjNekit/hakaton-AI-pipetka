@@ -32,7 +32,7 @@ function svgPoint(svg, e) {
   return [p.x, p.y];
 }
 
-export default function PhotoCompare({ run, useLlm }) {
+export default function PhotoCompare({ run, modelOn }) {
   const [blocks, setBlocks] = useState(null);
   const [blocksError, setBlocksError] = useState(null);
   const [facadeId, setFacadeId] = useState(null);
@@ -81,13 +81,26 @@ export default function PhotoCompare({ run, useLlm }) {
     setQuad(null);
   };
 
-  const chooseUpload = (file) => {
+  // своё фото загружается в сервис processor один раз; углы и сравнение ссылаются на него по uploadId
+  const chooseUpload = async (file) => {
     if (!file) return;
     if (photo && photo.kind === "upload") URL.revokeObjectURL(photo.url);
-    setPhoto({ kind: "upload", file, url: URL.createObjectURL(file), label: file.name });
+    const url = URL.createObjectURL(file);
+    setPhoto({ kind: "upload", file, url, label: file.name, uploadId: null });
     setNatural(null);
     setQuad(null);
+    setHint("Загружаю фото…");
+    try {
+      const { uploads } = await api.uploadFiles([file]);
+      const up = uploads.find((u) => u.kind === "image");
+      if (!up) throw new Error("нужен JPEG или PNG");
+      setPhoto((p) => (p && p.url === url ? { ...p, uploadId: up.id } : p));
+      setHint(null);
+    } catch (e) {
+      setHint(`Фото не загружено: ${e.message}`);
+    }
   };
+  const photoReady = photo && (photo.kind === "passport" || photo.uploadId);
 
   const onPhotoLoad = (e) => {
     const w = e.currentTarget.naturalWidth;
@@ -97,11 +110,11 @@ export default function PhotoCompare({ run, useLlm }) {
   };
 
   const autoCorners = async () => {
-    if (!photo) return;
+    if (!photoReady) return;
     setHint("Ищу углы фасада…");
     try {
       const res = await api.corners(run.id, {
-        photo: photo.kind === "upload" ? photo.file : null,
+        uploadId: photo.kind === "upload" ? photo.uploadId : null,
         photoBlock: photo.kind === "passport" ? photo.block : null,
       });
       setQuad(res.quad);
@@ -112,24 +125,41 @@ export default function PhotoCompare({ run, useLlm }) {
   };
 
   const submit = async () => {
-    if (!facade || !photo || !quad) return;
+    if (!facade || !photoReady || !quad) return;
     setBusy(true);
     setError(null);
     try {
       const res = await api.compare(run.id, {
         facade: facade.id,
-        photo: photo.kind === "upload" ? photo.file : null,
+        uploadId: photo.kind === "upload" ? photo.uploadId : null,
         photoBlock: photo.kind === "passport" ? photo.block : null,
         quad,
         rect,
-        llm: useLlm,
       });
       setCurrent(res);
       setHistory((h) => [res, ...h]);
+      if (modelOn) review(res);
     } catch (e) {
       setError(e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // описание отличий моделью — через сервис chat; вердикт по цвету уже готов, модель только дополняет
+  const [reviewing, setReviewing] = useState(null);
+  const replace = (item) => {
+    setHistory((h) => h.map((x) => (x.id === item.id ? item : x)));
+    setCurrent((c) => (c && c.id === item.id ? item : c));
+  };
+  const review = async (item) => {
+    setReviewing(item.id);
+    try {
+      replace(await api.reviewPhoto(run.id, item.id));
+    } catch (e) {
+      replace({ ...item, llm: { ...item.llm, error: e.message } });
+    } finally {
+      setReviewing(null);
     }
   };
 
@@ -179,7 +209,7 @@ export default function PhotoCompare({ run, useLlm }) {
           </label>
           {blocks.photos.length > 0 && (
             <>
-              <p className="pc-hint">или фото из фотофиксации паспорта:</p>
+              <p className="pc-hint">или фото из пакета и фотофиксации документа:</p>
               <div className="pc-thumbs pc-thumbs-photo">
                 {blocks.photos.map((b) => (
                   <button
@@ -208,12 +238,12 @@ export default function PhotoCompare({ run, useLlm }) {
             <QuadPicker src={photo.url} natural={natural} quad={quad} onLoad={onPhotoLoad} onChange={setQuad} />
           )}
           <div className="pc-actions">
-            <button type="button" className="btn btn-primary" disabled={!facade || !photo || !quad || busy} onClick={submit}>
-              {busy ? (useLlm ? "Сравниваю (с моделью до минуты)…" : "Сравниваю…") : "Сравнить"}
+            <button type="button" className="btn btn-primary" disabled={!facade || !photoReady || !quad || busy} onClick={submit}>
+              {busy ? "Сравниваю…" : "Сравнить"}
             </button>
             {photo && natural && (
               <>
-                <button type="button" className="btn btn-quiet" onClick={autoCorners}>
+                <button type="button" className="btn btn-quiet" onClick={autoCorners} disabled={!photoReady}>
                   Найти углы автоматически
                 </button>
                 <button type="button" className="btn btn-quiet" onClick={() => { setQuad(defaultQuad(natural[0], natural[1])); setHint(null); }}>
@@ -227,7 +257,9 @@ export default function PhotoCompare({ run, useLlm }) {
         </div>
       </section>
 
-      {current && <Result run={run} item={current} />}
+      {current && (
+        <Result run={run} item={current} reviewing={reviewing === current.id} onReview={modelOn ? () => review(current) : null} />
+      )}
 
       {history.length > 1 && (
         <section className="pc-history" aria-label="Предыдущие сравнения">
@@ -367,7 +399,7 @@ function QuadPicker({ src, natural, quad, onLoad, onChange }) {
   );
 }
 
-function Result({ run, item }) {
+function Result({ run, item, reviewing, onReview }) {
   const res = item.result;
   const v = PHOTO_VERDICT[res.verdict];
   const [copied, setCopied] = useState(false);
@@ -408,7 +440,14 @@ function Result({ run, item }) {
           </div>
           <div className="cell-wide cell-end">
             <dt>Описание</dt>
-            <dd>{item.llm.used ? `модель ${item.llm.model}` : "по шаблону, без модели"}</dd>
+            <dd>
+              {reviewing ? "модель смотрит фото…" : item.llm.used ? `модель ${item.llm.model}` : "по шаблону, без модели"}
+              {!reviewing && onReview && (
+                <button type="button" className="btn btn-quiet pc-review-btn" onClick={onReview}>
+                  {item.llm.used ? "описать заново" : "описать моделью"}
+                </button>
+              )}
+            </dd>
           </div>
         </dl>
       </div>

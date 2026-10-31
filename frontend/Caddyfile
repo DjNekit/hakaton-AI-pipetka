@@ -4,9 +4,31 @@
 
 	handle /api/* {
 		request_body {
-			max_size 110MB
+			max_size 10MB
 		}
 		reverse_proxy backend:8000 {
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+
+	# файлы документов и загрузка пакета — сервис processor
+	handle /files/* {
+		request_body {
+			max_size 600MB
+		}
+		reverse_proxy processor:8001 {
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+
+	# чат по отчёту — отдельный сервис; ответ идёт потоком (SSE), поэтому без буферизации
+	handle /chat/* {
+		reverse_proxy chat:3000 {
+			flush_interval -1
 			transport http {
 				read_timeout 10m
 			}
