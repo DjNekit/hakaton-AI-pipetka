@@ -67,7 +67,7 @@ app.get('/chat/health', async c => {
   const user = await getCurrentUser(c.req.raw)
   if (!user) return jsonError(401, 'unauthorized')
   c.header('Cache-Control', 'no-store')
-  return c.json(await chatStatus(CHAT_URL))
+  return c.json(await chatStatus(CHAT_URL, c.req.query('refresh') === '1'))
 })
 
 app.on(['GET', 'POST'], '/auth/*', c => auth.handler(c.req.raw))
