@@ -130,6 +130,7 @@ def run_check(
                 d["ref"] = rules["rules"][f.rule]["ref"]
                 d["title"] = rules["rules"][f.rule]["title"]
                 d["id"] = f"F{len(findings) + 1:03d}"
+                d["dismissed"] = False
                 findings.append(d)
         checklist = [
             {
@@ -277,6 +278,7 @@ def _findings_and_checklist(results, rules) -> tuple[list[dict], list[dict]]:
             d["ref"] = rules["rules"][f.rule]["ref"]
             d["title"] = rules["rules"][f.rule]["title"]
             d["id"] = f"F{len(findings) + 1:03d}"
+            d["dismissed"] = False
             findings.append(d)
     checklist = [
         {

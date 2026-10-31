@@ -146,6 +146,8 @@ class PgStore:
             if report is not None:
                 cur.execute(DELETE_FINDINGS, (status["id"],))
                 for f in report.get("findings", []):
+                    if f.get("dismissed"):
+                        continue
                     cur.execute(INSERT_FINDING, (status["id"], f["id"], f["rule"], f["severity"], f.get("page"),
                                                  f.get("element"), f.get("message"), f.get("ref")))
 

@@ -1,9 +1,15 @@
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # tesseract с русским языком — в образе, на хост ничего ставить не нужно; libglib — для OpenCV
-RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-rus libglib2.0-0 ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update || true \
+    && apt-get install -y --no-install-recommends \
+       tesseract-ocr \
+       tesseract-ocr-rus \
+       libglib2.0-0t64 \
+       ca-certificates \
+    && rm -rf /var/lib/apt/lists/* || true
 # Сертификаты НУЦ Минцифры — без них не проверить TLS-сертификат GigaChat API. Если gu-st.ru недоступен при сборке,
 # образ всё равно собирается; тогда задайте GIGACHAT_VERIFY_SSL=0 (только для отладки) или GIGACHAT_CA_BUNDLE.
 RUN python -c "import urllib.request as u; [open(f'/usr/local/share/ca-certificates/{n}.crt', 'wb').write(u.urlopen(f'https://gu-st.ru/content/lending/{n}.crt', timeout=30).read()) for n in ('russian_trusted_root_ca_pem', 'russian_trusted_sub_ca_pem')]" \

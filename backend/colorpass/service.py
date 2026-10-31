@@ -12,21 +12,23 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import __version__
 from .checks import load_rules
 from .llm import LLMClient, make_client
 from .store import get_store, safe
-from .pipeline import run_check
+from .pipeline import run_check, template_conclusion
 
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS_DIR = Path(os.getenv("COLORPASS_RUNS_DIR", ROOT / "runs" / "web"))
+ARCHIVE_DIR = RUNS_DIR / "archive"
 REAL_DIR = Path(os.getenv("COLORPASS_REAL_DIR", ROOT / "dataset" / "real"))
 SIGNS_DIR = Path(os.getenv("COLORPASS_SIGNS_DIR", ROOT / "dataset" / "signs"))
+DECISIONS = {"accepted", "rejected"}
 
 
 def _sample_dirs() -> list[Path]:
@@ -48,8 +50,90 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _run_dir(run_id: str) -> Path | None:
+    """Каталог проверки: активный или перенесённый в архив."""
+    for base in (RUNS_DIR, ARCHIVE_DIR):
+        path = base / run_id
+        if (path / "status.json").exists():
+            return path
+    return None
+
+
 def _status_path(run_id: str) -> Path:
-    return RUNS_DIR / run_id / "status.json"
+    run_dir = _run_dir(run_id)
+    return (run_dir or RUNS_DIR / run_id) / "status.json"
+
+
+def _status_paths() -> list[Path]:
+    paths: list[Path] = []
+    for base in (RUNS_DIR, ARCHIVE_DIR):
+        if base.exists():
+            paths.extend(base.glob("*/status.json"))
+    return paths
+
+
+def _archive_after_days() -> int:
+    try:
+        value = (load_rules().get("thresholds") or {}).get("archive_after_days", 30)
+        return max(0, int(value))
+    except (OSError, TypeError, ValueError):
+        return 30
+
+
+def _parse_time(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment
+
+
+def _archive_due(status: dict, days: int) -> bool:
+    if status.get("archived_at") or status.get("decision") not in DECISIONS:
+        return False
+    decided = _parse_time(status.get("decided_at"))
+    return bool(decided and datetime.now(timezone.utc) >= decided + timedelta(days=days))
+
+
+_ARCHIVE_LOCK = threading.Lock()
+
+
+def _archive_run(run_id: str, status: dict, days: int) -> tuple[Path, dict]:
+    """Переносит проверку в runs/web/archive/<id> через 30 дней после решения."""
+    run_dir = _run_dir(run_id)
+    if run_dir is None or not _archive_due(status, days):
+        return run_dir or RUNS_DIR / run_id, status
+    with _ARCHIVE_LOCK:
+        run_dir = _run_dir(run_id)
+        if run_dir is None:
+            return RUNS_DIR / run_id, status
+        path = run_dir / "status.json"
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return run_dir, status
+        if not _archive_due(current, days):
+            return run_dir, current
+        current["archived_at"] = _now()
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        if run_dir.parent != ARCHIVE_DIR:
+            ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+            target = ARCHIVE_DIR / run_id
+            if target.exists():
+                log.warning("Каталог архива %s уже существует, файл оставлен на месте", target)
+            else:
+                run_dir.rename(target)
+                run_dir = target
+        store = get_store()
+        if store:
+            safe("архивация проверки", lambda: store.save_status(current))
+        return run_dir, current
 
 
 def _write_status(run_id: str, report: dict | None = None, **updates) -> dict:
@@ -202,7 +286,7 @@ def start_sample(name: str, use_llm: bool = True) -> dict:
 
 def _import_files_to_db(store) -> None:
     """Пустая база при уже накопленных файлах (база подключена позже): переносим проверки и сравнения."""
-    for p in sorted(RUNS_DIR.glob("*/status.json")) if RUNS_DIR.exists() else []:
+    for p in sorted(_status_paths()):
         try:
             status = json.loads(p.read_text(encoding="utf-8"))
             rp = p.parent / "report.json"
@@ -215,33 +299,44 @@ def _import_files_to_db(store) -> None:
 
 
 def list_runs(limit: int = 50) -> list[dict]:
+    days = _archive_after_days()
     store = get_store()
     if store:
         rows = safe("журнал проверок", lambda: store.list_runs(limit))
-        if rows == [] and RUNS_DIR.exists() and any(RUNS_DIR.glob("*/status.json")):
+        if rows == [] and _status_paths():
             safe("перенос файлов в базу", lambda: _import_files_to_db(store))
             rows = safe("журнал проверок", lambda: store.list_runs(limit))
         # в базе могут остаться проверки, чьи файлы удалены вместе с runs/ — такие не показываем
-        rows = [r for r in rows or [] if _status_path(r.get("id", "")).exists()]
+        rows = [r for r in rows or [] if _run_dir(r.get("id", "")) is not None]
         if rows:
-            return rows
-    if not RUNS_DIR.exists():
-        return []
+            result = []
+            for row in rows:
+                if _archive_due(row, days):
+                    _, row = _archive_run(row["id"], row, days)
+                result.append(row)
+            return result
     items = []
-    for p in RUNS_DIR.glob("*/status.json"):
+    for p in _status_paths():
         try:
-            items.append(json.loads(p.read_text(encoding="utf-8")))
+            status = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
+        if _archive_due(status, days):
+            _, status = _archive_run(status.get("id", p.parent.name), status, days)
+        items.append(status)
     items.sort(key=lambda s: s.get("created_at", ""), reverse=True)
     return items[:limit]
 
 
 def get_run(run_id: str) -> dict:
-    if not _valid_id(run_id) or not _status_path(run_id).exists():
+    run_dir = _run_dir(run_id)
+    if not _valid_id(run_id) or run_dir is None:
         raise NotFound(run_id)
-    status = json.loads(_status_path(run_id).read_text(encoding="utf-8"))
-    report_path = RUNS_DIR / run_id / "report.json"
+    status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
+    days = _archive_after_days()
+    if _archive_due(status, days):
+        run_dir, status = _archive_run(run_id, status, days)
+    report_path = run_dir / "report.json"
     if status.get("state") == "done" and report_path.exists():
         status["report"] = json.loads(report_path.read_text(encoding="utf-8"))
     if status.get("sample"):
@@ -251,10 +346,148 @@ def get_run(run_id: str) -> dict:
     return status
 
 
+_EDIT_LOCK = threading.Lock()
+_FINDING_ACTIONS = {"dismiss", "restore", "delete"}
+
+
+def _recalc_report(report: dict) -> list[dict]:
+    """Пересчитывает вердикт, счётчики, чек-лист и заключение без исключённых замечаний."""
+    findings = report.get("findings") or []
+    for f in findings:
+        f.setdefault("dismissed", False)
+    active = [f for f in findings if not f.get("dismissed")]
+    errors = [f for f in active if f.get("severity") == "error"]
+    warns = [f for f in active if f.get("severity") == "warning"]
+    report["verdict"] = "fail" if errors else ("warn" if warns else "pass")
+
+    checklist = report.get("checklist") or []
+    for item in checklist:
+        if item.get("status") == "skip":
+            item["findings"] = []
+            continue
+        own = [f for f in active if f.get("rule") == item.get("rule")]
+        item["findings"] = [f["id"] for f in own]
+        sev = {f.get("severity") for f in own}
+        item["status"] = "fail" if "error" in sev else ("warn" if "warning" in sev else "ok")
+
+    counts = report.setdefault("counts", {})
+    counts.update(
+        errors=len(errors),
+        warnings=len(warns),
+        rules_total=len(checklist),
+        rules_ok=sum(1 for c in checklist if c.get("status") == "ok"),
+        rules_failed=sum(1 for c in checklist if c.get("status") == "fail"),
+        rules_warn=sum(1 for c in checklist if c.get("status") == "warn"),
+        rules_skipped=sum(1 for c in checklist if c.get("status") == "skip"),
+    )
+    for page in report.get("pages") or []:
+        page["findings"] = [f["id"] for f in active if f.get("page") == page.get("index")]
+    report["conclusion"] = {
+        "text": template_conclusion(report.get("summary") or {}, active),
+        "source": "template",
+        "recalculated": True,
+    }
+    return active
+
+
+def _refresh_annotations(run_dir: Path, report: dict, active: list[dict]) -> None:
+    """Перерисовывает листы с рамками только по оставленным замечаниям."""
+    pages = report.get("pages") or []
+    if not pages:
+        return
+    try:
+        from PIL import Image
+
+        from .ingest import Document
+        from .pipeline import PREVIEW_SCALE, _annotate
+
+        doc = Document(run_dir / "input.pdf")
+        try:
+            for entry in pages:
+                page_f = [f for f in active if f.get("page") == entry.get("index") and f.get("bbox")]
+                rel = entry.get("annotated")
+                if page_f:
+                    rel = rel or f"annotated/p{entry['index'] + 1:02d}.png"
+                    (run_dir / "annotated").mkdir(exist_ok=True)
+                    img = doc.render(entry["index"], PREVIEW_SCALE)
+                    Image.fromarray(_annotate(img, page_f, PREVIEW_SCALE)).save(run_dir / rel, optimize=True)
+                    entry["annotated"] = rel
+                elif rel:
+                    entry.pop("annotated", None)
+                    (run_dir / rel).unlink(missing_ok=True)
+        finally:
+            doc.close()
+    except Exception as exc:  # noqa: BLE001 — без картинок отчёт остаётся корректным
+        log.warning("Не удалось обновить изображения листов: %s", exc)
+
+
+def change_finding_status(run_id: str, finding_id: str, action: str = "dismiss", reason: str = "") -> dict:
+    """Исключает замечание как ложное срабатывание, возвращает его или удаляет из отчёта."""
+    action = (action or "").strip().lower()
+    if action not in _FINDING_ACTIONS:
+        raise BadRequest("Действие должно быть dismiss, restore или delete")
+    if not finding_id:
+        raise BadRequest("Не указано замечание")
+    with _EDIT_LOCK:
+        run_dir, report = _done_report(run_id)
+        findings = report.get("findings") or []
+        target = next((f for f in findings if f.get("id") == finding_id), None)
+        if target is None:
+            raise NotFound(finding_id)
+        if action == "delete":
+            report["findings"] = [f for f in findings if f.get("id") != finding_id]
+        else:
+            target["dismissed"] = action == "dismiss"
+            if target["dismissed"]:
+                target["dismissed_at"] = _now()
+                target["dismiss_reason"] = (reason or "").strip() or None
+            else:
+                target.pop("dismissed_at", None)
+                target.pop("dismiss_reason", None)
+        active = _recalc_report(report)
+        _refresh_annotations(run_dir, report, active)
+        (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "conclusion.md").write_text(report["conclusion"]["text"], encoding="utf-8")
+        _write_status(
+            run_id,
+            report=report,
+            verdict=report["verdict"],
+            counts=report["counts"],
+            dismissed=sum(1 for f in report["findings"] if f.get("dismissed")),
+            edited_at=_now(),
+        )
+        return get_run(run_id)
+
+
+def set_decision(run_id: str, decision: str, note: str = "") -> dict:
+    """Фиксирует решение инспектора: документ проверен и принят или отклонён."""
+    decision = (decision or "").strip().lower()
+    if decision not in DECISIONS:
+        raise BadRequest("Решение должно быть accepted или rejected")
+    with _EDIT_LOCK:
+        run_dir, _ = _done_report(run_id)
+        status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
+        if status.get("archived_at"):
+            raise BadRequest("Файл уже в архиве, решение изменить нельзя")
+        decided_at = _now()
+        archive_at = (datetime.fromisoformat(decided_at) + timedelta(days=_archive_after_days())).isoformat(
+            timespec="seconds"
+        )
+        _write_status(
+            run_id,
+            decision=decision,
+            decided_at=decided_at,
+            decision_note=(note or "").strip() or None,
+            archive_at=archive_at,
+        )
+        return get_run(run_id)
+
+
 def run_file(run_id: str, relpath: str) -> Path:
-    if not _valid_id(run_id):
+    run_dir = _run_dir(run_id)
+    if not _valid_id(run_id) or run_dir is None:
         raise NotFound(run_id)
-    base = (RUNS_DIR / run_id).resolve()
+    base = run_dir.resolve()
     path = (base / relpath).resolve()
     if base not in path.parents or not path.is_file():
         raise NotFound(relpath)
@@ -270,7 +503,10 @@ def _done_report(run_id: str) -> tuple[Path, dict]:
     run = get_run(run_id)
     if run.get("state") != "done" or "report" not in run:
         raise BadRequest("Проверка паспорта ещё не завершена")
-    return RUNS_DIR / run_id, run["report"]
+    run_dir = _run_dir(run_id)
+    if run_dir is None:
+        raise NotFound(run_id)
+    return run_dir, run["report"]
 
 
 def list_blocks(run_id: str) -> dict:

@@ -5,7 +5,7 @@ name: colorpass-dev
 
 services:
   backend:
-    build: ./backend
+    image: colorpass-dev-backend:test    # используем готовый образ
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]   # автоперезагрузка при изменении кода
     environment:
       GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}      # GigaChat API — запасная модель; без ключа — проверка по правилам

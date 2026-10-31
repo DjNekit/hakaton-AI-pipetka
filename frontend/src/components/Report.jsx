@@ -20,30 +20,52 @@ const TABS = [
   ["photo", "Сравнение с фото"],
 ];
 
-export default function Report({ run, useLlm }) {
+export default function Report({ run, useLlm, onUpdate }) {
   const report = run.report;
   const signage = report.document_kind === "signage";
   const tabs = TABS.filter(([key]) => (signage ? key !== "table" : key !== "explication"));
   const [tab, setTab] = useState("findings");
   const [selected, setSelected] = useState(null);
   const [page, setPage] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const findings = report.findings;
+  const activeFindings = useMemo(() => findings.filter((f) => !f.dismissed), [findings]);
   const defaultPage = useMemo(() => {
-    if (findings.length && findings[0].page != null) return findings[0].page;
+    if (activeFindings.length && activeFindings[0].page != null) return activeFindings[0].page;
     const facade = report.pages.find((p) => p.kinds[0] === "facade");
     return facade ? facade.index : 0;
-  }, [report, findings]);
+  }, [report, activeFindings]);
 
   useEffect(() => {
-    setSelected(findings.length ? findings[0].id : null);
-    setPage(defaultPage);
+    const first = activeFindings[0];
+    setSelected(first ? first.id : null);
+    setPage(first && first.page != null ? first.page : defaultPage);
     setTab("findings");
   }, [run.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const select = (f) => {
     setSelected(f.id);
     if (f.page != null) setPage(f.page);
+  };
+
+  const changeStatus = async (f, action) => {
+    setBusy(f.id);
+    setActionError(null);
+    try {
+      const updated = await api.changeFindingStatus(run.id, f.id, action);
+      onUpdate(updated);
+      if (action === "dismiss" && selected === f.id) {
+        const next = activeFindings.find((x) => x.id !== f.id);
+        setSelected(next ? next.id : null);
+        if (next && next.page != null) setPage(next.page);
+      }
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const v = VERDICT[report.verdict];
@@ -112,7 +134,7 @@ export default function Report({ run, useLlm }) {
         {tabs.map(([key, title]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={`tab${tab === key ? " is-active" : ""}`} onClick={() => setTab(key)}>
             {title}
-            {key === "findings" && findings.length > 0 && <span className="tab-count">{findings.length}</span>}
+            {key === "findings" && activeFindings.length > 0 && <span className="tab-count">{activeFindings.length}</span>}
           </button>
         ))}
         <a className="tab tab-link" href={api.fileUrl(run.id, "report.json")} target="_blank" rel="noreferrer">
@@ -122,20 +144,29 @@ export default function Report({ run, useLlm }) {
 
       {tab === "findings" && (
         <div className="split">
-          <Findings findings={findings} selected={selected} onSelect={select} report={report} />
-          <SheetViewer run={run} pageIndex={page ?? defaultPage} findings={findings} selected={selected} onSelect={select} onPage={setPage} />
+          <Findings
+            findings={findings}
+            selected={selected}
+            onSelect={select}
+            onDismiss={(f) => changeStatus(f, "dismiss")}
+            onRestore={(f) => changeStatus(f, "restore")}
+            busy={busy}
+            error={actionError}
+            report={report}
+          />
+          <SheetViewer run={run} pageIndex={page ?? defaultPage} findings={activeFindings} selected={selected} onSelect={select} onPage={setPage} />
         </div>
       )}
       {tab === "sheets" && (
         <div className="split">
           <Sheets run={run} current={page ?? defaultPage} onPick={setPage} />
-          <SheetViewer run={run} pageIndex={page ?? defaultPage} findings={findings} selected={selected} onSelect={select} onPage={setPage} />
+          <SheetViewer run={run} pageIndex={page ?? defaultPage} findings={activeFindings} selected={selected} onSelect={select} onPage={setPage} />
         </div>
       )}
-      {tab === "table" && <FinishTable report={report} findings={findings} onSelect={(f) => { select(f); setTab("findings"); }} />}
-      {tab === "explication" && <Explication report={report} onSelect={(f) => { select(f); setTab("findings"); }} />}
+      {tab === "table" && <FinishTable report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
+      {tab === "explication" && <Explication report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "checklist" && <Checklist report={report} onSelect={(f) => { select(f); setTab("findings"); }} />}
-      {tab === "conclusion" && <Conclusion run={run} />}
+      {tab === "conclusion" && <Conclusion run={run} onUpdate={onUpdate} />}
       {tab === "photo" && <PhotoCompare run={run} useLlm={useLlm} />}
     </article>
   );
@@ -143,7 +174,7 @@ export default function Report({ run, useLlm }) {
 
 function Expected({ run }) {
   const exp = run.expected;
-  const findings = run.report.findings.filter((f) => f.severity !== "info");
+  const findings = run.report.findings.filter((f) => f.severity !== "info" && !f.dismissed);
   const rules = new Set(findings.map((f) => f.rule));
   const defects = exp.defects;
   const found = defects.filter((d) => (d.rule_any || [d.rule]).some((r) => rules.has(r)));

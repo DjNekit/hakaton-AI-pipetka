@@ -11,6 +11,20 @@ export const STATUS = {
   skip: { label: "Не применимо", tone: "muted" },
 };
 
+export const DECISION = {
+  accepted: { label: "Проверен и принят", short: "Принят", tone: "ok" },
+  rejected: { label: "Проверен и отклонён", short: "Отклонён", tone: "error" },
+};
+
+export function runStatus(run) {
+  if (run.archived_at) return { label: "В архиве", short: "Архив", tone: "muted" };
+  if (run.decision && DECISION[run.decision]) return DECISION[run.decision];
+  if (run.state === "error") return { label: "ошибка", short: "ошибка", tone: "error" };
+  if (run.state !== "done") return { label: "идёт проверка", short: "идёт проверка", tone: "muted" };
+  const verdict = VERDICT[run.verdict] || { title: "", short: "", tone: "muted" };
+  return { label: verdict.short, short: verdict.short, tone: verdict.tone };
+}
+
 export const SEVERITY = {
   error: { label: "Ошибка", tone: "error" },
   warning: { label: "Предупреждение", tone: "warn" },
@@ -29,6 +43,11 @@ export function formatTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+export function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function sampleTitle(name) {

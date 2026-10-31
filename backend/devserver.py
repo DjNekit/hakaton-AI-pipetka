@@ -127,6 +127,18 @@ class Handler(BaseHTTPRequestHandler):
                         201,
                     )
                 return self._json({"comparisons": service.list_comparisons(m.group(1))})
+            m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/change_status", path)
+            if m and method == "POST":
+                return self._json(
+                    service.change_finding_status(
+                        m.group(1), form.get("finding_id", ""), form.get("action", "dismiss"), form.get("reason", "")
+                    )
+                )
+            m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/decision", path)
+            if m and method == "POST":
+                return self._json(
+                    service.set_decision(m.group(1), form.get("decision", ""), form.get("note", ""))
+                )
             m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/files/(.+)", path)
             if m and method == "GET":
                 p = service.run_file(m.group(1), m.group(2))

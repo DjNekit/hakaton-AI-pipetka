@@ -65,6 +65,9 @@ button {
 .tone-text-warn {
   color: var(--warn);
 }
+.tone-text-ok {
+  color: var(--ok);
+}
 .muted,
 .muted-block {
   color: var(--muted);
@@ -558,6 +561,11 @@ button {
   gap: 18px;
   align-items: start;
 }
+.findings-panel {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
 .findings {
   list-style: none;
   margin: 0;
@@ -567,6 +575,20 @@ button {
   max-height: calc(100vh - 120px);
   overflow-y: auto;
   padding-right: 4px;
+}
+.findings-panel .findings {
+  max-height: none;
+  overflow: visible;
+}
+.findings-dismissed {
+  display: grid;
+  gap: 8px;
+}
+.findings-dismissed .btn {
+  justify-self: start;
+}
+.findings-dismissed-list {
+  opacity: 0.9;
 }
 .findings-empty {
   padding: 18px;
@@ -584,16 +606,46 @@ button {
 .finding {
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
   text-align: left;
   background: var(--sheet);
   border: 1px solid var(--rule);
   border-left: 4px solid var(--muted);
   border-radius: 3px;
-  padding: 10px 12px;
-  cursor: pointer;
+  padding: 0;
+  display: block;
+}
+.finding-main {
+  width: 100%;
   display: grid;
   gap: 6px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.finding-main:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: -2px;
+}
+.finding-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+.finding.is-dismissed {
+  border-left-color: var(--muted);
+  background: var(--paper);
+}
+.finding.is-dismissed .finding-main {
+  opacity: 0.65;
+}
+.finding.is-dismissed .finding-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
 }
 .finding.tone-error {
   border-left-color: var(--error);
@@ -1040,6 +1092,49 @@ button {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+.paper-decision {
+  grid-column: 1 / -1;
+  border-left: 4px solid var(--rule-strong);
+}
+.paper-decision.tone-ok {
+  border-left-color: var(--ok);
+}
+.paper-decision.tone-error {
+  border-left-color: var(--error);
+}
+.decision-status {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.decision-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+.btn-danger:hover {
+  background: var(--error-soft);
+}
+.btn-danger.is-active {
+  background: var(--error);
+  color: #fff;
+}
+.btn-danger.is-active:hover {
+  background: #9f2a23;
+}
+.decision-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--pencil);
+}
+.decision-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--error);
 }
 .paper-reference {
   background: transparent;

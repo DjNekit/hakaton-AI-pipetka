@@ -120,6 +120,27 @@ def check_file(request, run_id: str, relpath: str):
     return FileResponse(open(path, "rb"), content_type=content_type)
 
 
+@api_view(["POST"])
+def change_status(request, run_id: str):
+    return JsonResponse(
+        service.change_finding_status(
+            run_id,
+            request.POST.get("finding_id", ""),
+            request.POST.get("action", "dismiss"),
+            request.POST.get("reason", ""),
+        ),
+        **_JSON,
+    )
+
+
+@api_view(["POST"])
+def set_decision(request, run_id: str):
+    return JsonResponse(
+        service.set_decision(run_id, request.POST.get("decision", ""), request.POST.get("note", "")),
+        **_JSON,
+    )
+
+
 # ----------------------------------------------------------------- фронтенд (сборка frontend/dist)
 
 
