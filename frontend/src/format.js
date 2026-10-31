@@ -28,6 +28,13 @@ export function runStatus(run) {
   return { label: verdict.short, short: verdict.short, title: verdict.title, tone: verdict.tone };
 }
 
+// Пакет: идёт проверка → общий вердикт (худший из документов и сверки документов между собой)
+export function packageStatus(pkg) {
+  if (pkg.state === "queued" || pkg.state === "running") return { short: "идёт проверка", title: "Идёт проверка", tone: "muted" };
+  const verdict = VERDICT[pkg.verdict];
+  return verdict ? { short: verdict.short, title: verdict.title, tone: verdict.tone } : { short: "проверен", title: "Проверен", tone: "muted" };
+}
+
 export const SEVERITY = {
   error: { label: "Ошибка", tone: "error" },
   warning: { label: "Предупреждение", tone: "warn" },

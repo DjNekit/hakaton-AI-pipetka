@@ -8,6 +8,12 @@ MVP для хакатона «Архитектура цифрового горо
 
 ## Что умеет
 
+**Пакет документов одной заявки**: загрузите сразу всё, что пришло по объекту, — PDF паспорта колористического
+решения, дизайн-проекта вывесок и фото фасада (JPEG, PNG). Каждый документ проверяется своими правилами, у каждого
+свой отчёт; общий вердикт пакета — худший из документов и **сверки документов между собой**: PKG-01 адрес объекта
+одинаковый во всех документах, PKG-02 все документы проверены, PKG-03 нет повторяющихся файлов. Фото пакета
+сразу доступны для сравнения с развёртками.
+
 **Два вида документов** — сервис сам определяет, что загружено:
 
 - **Паспорт колористического решения** (ПП Москвы № 114-ПП) — 22 проверки: комплектность разделов I–V и всех
@@ -41,8 +47,8 @@ API. Модель — помощник, а не судья: решения «с�
 модели — всё, кроме чата и текстов модели, работает.
 
 **Отчёт**: штамп-вердикт, каждое замечание выделено на листе, колеры «заявлено / фактически» с ΔE, таблица отделки
-или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md). История проверок
-и сравнений — в **PostgreSQL**, файлы отчётов — в `./runs`.
+или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md, Excel). Журнал пакетов,
+отчёты, решения и сравнения — в **PostgreSQL**, файлы документов — у сервиса `processor` в `./runs`.
 
 ## Запуск
 
@@ -50,8 +56,8 @@ API. Модель — помощник, а не судья: решения «с�
 
 | Файл | Для чего | Что запускает |
 |---|---|---|
-| `compose.yml` | локальная разработка | Django `runserver` и Vite с автоперезагрузкой (код смонтирован), PostgreSQL |
-| `compose.prod.yml` | сервер | сборка образов: gunicorn, Caddy (собранный фронтенд, HTTPS, прокси `/api`), PostgreSQL |
+| `compose.yml` | локальная разработка | Django `runserver`, Vite, processor, chat (код смонтирован), Redis, PostgreSQL |
+| `compose.prod.yml` | сервер | сборка образов: gunicorn, processor, chat, Caddy (собранный фронтенд, HTTPS, прокси), Redis, PostgreSQL |
 
 ### Локально
 
@@ -63,10 +69,14 @@ docker compose down                           # остановить (данны
 
 | Сервис | Что внутри | Порт |
 |---|---|---|
-| `frontend` | Vite dev server, `/api` проксируется на backend, `/chat` — на chat | 5173 (`COLORPASS_PORT`) |
+| `frontend` | Vite dev server: `/api` → backend, `/files` → processor, `/chat` → chat | 5173 (`COLORPASS_PORT`) |
+| `backend` | Django `runserver`: API, журнал пакетов, отчёты, решения; файлов и PDF не касается | 127.0.0.1:8000 |
+| `processor` | проверка PDF (tesseract, OpenCV), листы, сравнение фото, Excel, файлы `runs/`; задачи — из Redis | 127.0.0.1:8001 |
 | `chat` | языковые модели: Node + TanStack AI; чат, заключение, описание фото; LM Studio, запасной GigaChat | 127.0.0.1:3000 |
-| `backend` | Django `runserver` + ядро проверки, tesseract, сертификаты НУЦ Минцифры | 127.0.0.1:8000 |
-| `db` | PostgreSQL 16: проверки, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
+| `redis` | очередь задач backend → processor и готовые результаты | 127.0.0.1:6379 |
+| `db` | PostgreSQL 16: пакеты, документы с отчётами, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
+
+Код processor после правок подхватывается перезапуском: `docker compose restart processor`.
 
 ### Прод: https://ai-pipetka.fun
 
@@ -134,11 +144,12 @@ Docker на сервере ставится при первом деплое, е
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
-| `docker compose exec backend python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
-| `docker compose exec backend python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
-| `docker compose exec backend python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
-| `docker compose exec db psql -U colorpass -c "select file, verdict, errors from checks"` | история проверок в базе |
+| `docker compose exec processor python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
+| `docker compose exec processor python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
+| `docker compose exec processor python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
+| `docker compose exec processor python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
+| `docker compose exec db psql -U colorpass -c "select title, verdict from packages"` | журнал пакетов в базе |
+| `docker compose exec redis redis-cli llen cp:jobs` | сколько пакетов ждёт в очереди |
 
 ## Качество
 
@@ -160,19 +171,29 @@ Docker на сервере ставится при первом деплое, е
 ## Как это устроено
 
 ```
-PDF ──► ingest ──► вид документа ──► extract / signage ──► checks / signage ──► report ──► Django API ──► React UI
-        текст,      паспорт или        листы, таблица        rules.yaml:            JSON, листы,     │
-        таблицы,    дизайн-проект      отделки, записка,     114-ПП, 902-ПП, АХК    заключение       ├─► PostgreSQL
-        векторы,                       экспликация вывесок                                           │   (история)
-        рендер                                                                                       └─► runs/ (файлы)
-фото ──► photo: развёртка/фотомонтаж ↔ фото, углы фасада, ΔE00 по зонам, карта отличий, вердикт
+браузер ──► /files/uploads ──► processor: файлы пакета (PDF, фото) → runs/uploads
+        ──► POST /api/packages ──► backend: пакет и документы в PostgreSQL ──► Redis cp:jobs ──┐
+                                                                                              ▼
+processor (воркеры): ingest ──► вид документа ──► extract / signage ──► checks ──► отчёт, листы, развёртки
+                     текст, таблицы, рендер, OCR    паспорт / вывески    rules.yaml: 114-ПП, 902-ПП, АХК
+                     после всех документов — сверка пакета (PKG-01…03) ──► Redis cp:result:* ──► backend → база
+быстрые операции с файлами (развёртки, углы, сравнение фото, пересчёт листов, Excel): backend ──► Redis cp:rpc ──► processor
 chat (TanStack AI) ──► LM Studio через ngrok, запасной GigaChat API: чат по отчёту, заключение, описание отличий на фото
-     данные — GET /api/checks/{id}, /rules, /comparisons; ответы модели — POST /api/checks/{id}/conclusion, …/review
+     данные — GET /api/checks/{id}; картинки — /files; ответы модели — POST /api/checks/{id}/conclusion, …/review
 ```
 
+Бэкенд хранит в базе всё, что видит и меняет инспектор (пакеты, отчёты, исключённые замечания, решения,
+заключения модели), и не касается файлов. Processor хранит файлы и делает всё, что требует PDF и изображений.
+Связь — очередь Redis: проверки пакетов не теряются при перезапуске и масштабируются числом воркеров
+(`COLORPASS_WORKERS`); готовые отчёты бэкенд забирает из Redis в базу при первом обращении.
+
 ```
-backend/
-  colorpass/            ядро (не зависит от Django)
+backend/                Django 4.2: /api/* — пакеты, документы, решения, ответы модели
+  core/service.py       пакеты, синхронизация результатов, пересчёт через processor, решения, архив
+  core/store.py         PostgreSQL (DATABASE_URL); без базы — в памяти процесса (для разработки)
+  core/redisq.py        клиент Redis и формат очередей (копия processor/worker/redisq.py)
+processor/
+  colorpass/            ядро проверки (не зависит от веба)
     ingest.py           чтение PDF, рендер, OCR сканов
     extract.py          паспорт: классификация листов, модель паспорта, выноски
     signage.py          дизайн-проект вывесок: листы, экспликация, 11 проверок по 902-ПП
@@ -184,32 +205,33 @@ backend/
     textmatch.py        разбор пояснительной записки правилами
     checks.py           22 проверки паспорта
     pipeline.py         полный цикл, отчёт, изображения
-    store.py            история в PostgreSQL (DATABASE_URL); без базы — файлы
-    service.py          фоновые проверки, сравнения, файлы для веб-API
+    excel.py            выгрузка чек-листа и заключения в XLSX
     evaluate.py         метрики на размеченных документах и сравнениях фото
     data/rules.yaml     формализованные требования и пороги
-  api/, config/         Django 4.2: /api/*
-  devserver.py          тот же API без Django
-frontend/               React 18 + Vite; чат — components/ChatPanel.jsx, chat/tools.js
+  worker/               сервис: воркеры очереди (jobs.py), сверка пакета (package.py), файлы и загрузки
+                        по HTTP (fileserver.py), раскладка runs/ (storage.py)
+frontend/               React 18 + Vite; пакет — components/PackageView.jsx, чат — ChatPanel.jsx, chat/tools.js
 chat/                   языковые модели: TanStack AI + Hono (server.js, llm.js — LM Studio и GigaChat, tasks.js —
                         заключение и описание фото, tools.js — инструменты чата, prompt.js)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```
 
-API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples/{name}/check`,
-`POST /api/checks` (multipart `file`), `GET /api/checks`, `GET /api/checks/{id}`,
-`GET /api/checks/{id}/files/{path}`, `GET /api/checks/{id}/export.xlsx` (выгрузка чек-листа и заключения в Excel);
-сравнение фото: `GET /api/checks/{id}/blocks` (развёртки, чертежи,
-фотомонтаж и фото документа), `POST /api/checks/{id}/corners` (подсказка углов фасада: `photo` или `photo_block`),
-`POST /api/checks/{id}/comparisons` (multipart `facade`, `photo` или `photo_block`, `quad` — 4 угла `[[x, y], …]`,
-`rect` — часть развёртки в долях), `GET /api/checks/{id}/comparisons`.
-Замечания: `POST /api/checks/{id}/change_status` (multipart `finding_id`, `action` — `dismiss`/`restore`/`delete`,
-`reason` — необязательно) исключает ложное срабатывание и пересчитывает вердикт, счётчики и заключение.
-Решение по документу: `POST /api/checks/{id}/decision` (multipart `decision` — `accepted`/`rejected`, `note` —
-необязательно) ставит статус «Проверен и принят» или «Проверен и отклонён»; через 30 дней файл автоматически
-переносится в архив (`runs/web/archive/`), но остаётся доступен по прямой ссылке.
-Ответы модели (присылает сервис `chat`): `POST /api/checks/{id}/conclusion` (JSON `text`, `model`, `provider`),
-`POST /api/checks/{id}/comparisons/{cid}/review` (JSON `review` — `same_facade`, `differences`, `summary`; или `error`).
+API бэкенда (JSON):
+- пакеты: `POST /api/packages` (`uploads` — ответ processor на загрузку, `samples` — имена образцов, `title`),
+  `GET /api/packages`, `GET /api/packages/{id}` (документы, ход проверки, сверка, фото), `POST /api/samples/{name}/check`;
+- документ: `GET /api/checks/{id}` (статус + отчёт), `GET /api/checks/{id}/report.json`, `…/conclusion.md`,
+  `…/export.xlsx` (перенаправляет на файл processor);
+- замечания: `POST /api/checks/{id}/change_status` (`finding_id`, `action` — `dismiss`/`restore`/`delete`, `reason`) —
+  processor пересчитывает вердикт, чек-лист, заключение и листы с рамками;
+- решение: `POST /api/checks/{id}/decision` (`decision` — `accepted`/`rejected`, `note`); через 30 дней файлы
+  документа уходят в архив processor (`runs/archive/`), ссылки работают;
+- сравнение фото: `GET /api/checks/{id}/blocks`, `POST /api/checks/{id}/corners` (`upload_id` или `photo_block`),
+  `POST /api/checks/{id}/comparisons` (`facade`, `upload_id` или `photo_block`, `quad`, `rect`), `GET …/comparisons`;
+- ответы модели (присылает `chat`): `POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`;
+- `GET /api/health` — база, Redis, жив ли processor; `GET /api/rules`, `GET /api/samples`.
+
+Processor: `POST /files/uploads` (multipart `files`, можно несколько), `GET /files/{doc}/{путь}` (листы, развёртки,
+карты отличий, Excel; `package/…` — фото пакета), `GET /files/samples/{имя}.pdf`.
 
 Сервис `chat`: `POST /chat/checks/{id}` (диалог, поток AG-UI для `useChat`), `POST /chat/checks/{id}/conclusion`,
 `POST /chat/checks/{id}/comparisons/{cid}/review`, `GET /chat/health` (какая модель отвечает).

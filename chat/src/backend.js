@@ -1,4 +1,5 @@
-// Обращения к основному бэкенду (Django API): чат берёт отсюда данные и сюда сохраняет ответы модели.
+// Обращения к основному бэкенду (Django API): чат берёт отсюда данные и сюда сохраняет ответы модели;
+// файлы документов — у сервиса processor (FILES_URL).
 import { config } from "./config.js";
 
 export class BackendError extends Error {
@@ -30,8 +31,12 @@ export const backend = {
   check: (checkId) => get(`/checks/${id(checkId)}`),
   comparisons: (checkId) => get(`/checks/${id(checkId)}/comparisons`),
   rules: () => get("/rules"),
-  /** Файл проверки (картинка листа, сравнения) — в base64 для модели. */
-  fileBase64: async (checkId, rel) => Buffer.from(await (await call(`/checks/${id(checkId)}/files/${rel}`)).arrayBuffer()).toString("base64"),
+  /** Файл документа (картинка листа, сравнения) — у сервиса processor, в base64 для модели. */
+  fileBase64: async (checkId, rel) => {
+    const res = await fetch(`${config.filesUrl}/${id(checkId)}/${rel}`, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new BackendError(`Файлы: HTTP ${res.status} на ${rel}`, res.status);
+    return Buffer.from(await res.arrayBuffer()).toString("base64");
+  },
   saveConclusion: (checkId, body) => post(`/checks/${id(checkId)}/conclusion`, body),
   saveReview: (checkId, cid, body) => post(`/checks/${id(checkId)}/comparisons/${id(cid)}/review`, body),
 };

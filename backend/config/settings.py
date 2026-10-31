@@ -2,14 +2,13 @@
 import os
 from pathlib import Path
 
-from colorpass.envfile import load_env
+from core.envfile import load_env
 
 load_env()
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
 PROJECT_DIR = BASE_DIR.parent
 FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
-(PROJECT_DIR / "runs").mkdir(exist_ok=True)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-colorpass-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
@@ -25,7 +24,7 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 TEMPLATES: list = []
 
-# История проверок пишет colorpass/store.py (DATABASE_URL). Django-моделей нет; база Django — та же PostgreSQL,
+# Пакеты, отчёты и журнал пишет core/store.py (DATABASE_URL). Django-моделей нет; база Django — та же PostgreSQL,
 # без DATABASE_URL — служебный SQLite.
 _DB_URL = os.getenv("DATABASE_URL", "")
 if _DB_URL.startswith("postgres"):
@@ -46,7 +45,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": PROJECT_DIR / "runs" / "db.sqlite3",
+            "NAME": ":memory:",
         }
     }
 

@@ -1,6 +1,10 @@
-// Тонкий клиент API: бэкенд (Django, правила — backend/api/urls.py) и сервис chat (языковые модели — chat/src/server.js)
+// Тонкий клиент API: бэкенд (Django: пакеты, отчёты, решения — backend/api/urls.py), сервис processor
+// (файлы: загрузка, листы, развёртки — processor/worker/fileserver.py) и сервис chat (модели — chat/src/server.js)
 const BASE = "/api";
 const CHAT = "/chat";
+const FILES = "/files";
+
+const json = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 async function request(path, options = {}, base = BASE) {
   const res = await fetch(base + path, options);
@@ -22,49 +26,47 @@ export const api = {
   health: () => request("/health"),
   rules: () => request("/rules"),
   samples: () => request("/samples").then((d) => d.samples),
-  checks: () => request("/checks").then((d) => d.checks),
-  check: (id) => request(`/checks/${id}`),
-  checkSample: (name) => request(`/samples/${name}/check`, { method: "POST" }),
-  upload: (file) => {
+
+  // пакет документов одной заявки: файлы загружаются в processor, пакет создаёт бэкенд и ставит в очередь
+  uploadFiles: (files) => {
     const fd = new FormData();
-    fd.append("file", file);
-    return request("/checks", { method: "POST", body: fd });
+    for (const f of files) fd.append("files", f, f.name);
+    return request("/uploads", { method: "POST", body: fd }, FILES);
   },
+  createPackage: ({ uploads = [], samples = [], title = "" }) => request("/packages", json("POST", { uploads, samples, title })),
+  packages: () => request("/packages").then((d) => d.packages),
+  package: (id) => request(`/packages/${id}`),
+  checkSample: (name) => request(`/samples/${name}/check`, { method: "POST" }),
+
+  // документ пакета
+  check: (id) => request(`/checks/${id}`),
+  changeFindingStatus: (id, findingId, action, reason = "") =>
+    request(`/checks/${id}/change_status`, json("POST", { finding_id: findingId, action, reason })),
+  setDecision: (id, decision, note = "") => request(`/checks/${id}/decision`, json("POST", { decision, note })),
+
+  // сравнение фото с развёрткой (фото — загрузка в processor или фото из документа/пакета)
   blocks: (id) => request(`/checks/${id}/blocks`),
   comparisons: (id) => request(`/checks/${id}/comparisons`).then((d) => d.comparisons),
-  compare: (id, { facade, photo, photoBlock, quad, rect }) => {
-    const fd = new FormData();
-    fd.append("facade", facade);
-    if (photo) fd.append("photo", photo);
-    if (photoBlock) fd.append("photo_block", photoBlock);
-    fd.append("quad", JSON.stringify(quad.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10])));
-    if (rect) fd.append("rect", JSON.stringify(rect));
-    return request(`/checks/${id}/comparisons`, { method: "POST", body: fd });
-  },
-  corners: (id, { photo, photoBlock }) => {
-    const fd = new FormData();
-    if (photo) fd.append("photo", photo);
-    if (photoBlock) fd.append("photo_block", photoBlock);
-    return request(`/checks/${id}/corners`, { method: "POST", body: fd });
-  },
-  changeFindingStatus: (id, findingId, action, reason = "") => {
-    const fd = new FormData();
-    fd.append("finding_id", findingId);
-    fd.append("action", action);
-    if (reason) fd.append("reason", reason);
-    return request(`/checks/${id}/change_status`, { method: "POST", body: fd });
-  },
-  setDecision: (id, decision, note = "") => {
-    const fd = new FormData();
-    fd.append("decision", decision);
-    if (note) fd.append("note", note);
-    return request(`/checks/${id}/decision`, { method: "POST", body: fd });
-  },
+  compare: (id, { facade, uploadId, photoBlock, quad, rect }) =>
+    request(`/checks/${id}/comparisons`, json("POST", {
+      facade,
+      upload_id: uploadId || null,
+      photo_block: photoBlock || null,
+      quad: quad.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
+      rect: rect || null,
+    })),
+  corners: (id, { uploadId, photoBlock }) =>
+    request(`/checks/${id}/corners`, json("POST", { upload_id: uploadId || null, photo_block: photoBlock || null })),
+
   // языковые модели — сервис chat: он сам берёт данные из бэкенда и сохраняет туда результат
   modelHealth: () => request("/health", {}, CHAT).then((d) => d.llm),
   writeConclusion: (id) => request(`/checks/${id}/conclusion`, { method: "POST" }, CHAT),
   reviewPhoto: (id, cid) => request(`/checks/${id}/comparisons/${cid}/review`, { method: "POST" }, CHAT),
-  fileUrl: (id, rel) => `${BASE}/checks/${id}/files/${rel}`,
+
+  // ссылки
+  fileUrl: (id, rel) => `${FILES}/${id}/${rel}`,
+  reportJsonUrl: (id) => `${BASE}/checks/${id}/report.json`,
+  conclusionMdUrl: (id) => `${BASE}/checks/${id}/conclusion.md`,
   exportExcelUrl: (id) => `${BASE}/checks/${id}/export.xlsx`,
-  samplePdfUrl: (name) => `${BASE}/samples/${name}/pdf`,
+  samplePdfUrl: (name) => `${FILES}/samples/${name}.pdf`,
 };

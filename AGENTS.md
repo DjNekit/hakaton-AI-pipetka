@@ -1,20 +1,20 @@
 # AGENTS.md
 
-Hackathon MVP «Колорпаспорт»: checks facade-color passports and sign design projects against Moscow regulations, compares facade drawings with photos. Python/Django backend + React/Vite frontend, Docker Compose.
+Hackathon MVP «Колорпаспорт»: checks facade-color passports and sign design projects against Moscow regulations, compares facade drawings with photos. Services: Django backend (API, PostgreSQL), processor (PDF/files, Redis queue workers), chat (LLMs, TanStack AI), React/Vite frontend; Docker Compose.
 
 ## Run and verify
 
-Docker is the supported path (tesseract, OpenCV, PostgreSQL, GigaChat CA certs live in images):
+Docker is the supported path (tesseract, OpenCV, Redis, PostgreSQL, GigaChat CA certs live in images):
 
 ```bash
 cp .env.example .env
 docker compose up --build          # UI http://localhost:5173, API http://localhost:8000/api/health
 docker compose down
-docker compose exec backend python -m colorpass check ../dataset/real/<file>.pdf --no-llm
-docker compose exec backend python -m colorpass eval
-docker compose exec backend python -m colorpass eval ../dataset/signs
-docker compose exec backend python -m colorpass eval-photos
-docker compose exec backend python -m colorpass llm-status
+docker compose exec processor python -m colorpass check ../dataset/real/<file>.pdf
+docker compose exec processor python -m colorpass eval
+docker compose exec processor python -m colorpass eval ../dataset/signs
+docker compose exec processor python -m colorpass eval-photos
+curl localhost:3000/chat/health    # which LLM answers (LM Studio or GigaChat)
 ```
 
 Frontend only: `cd frontend && npm ci && npm run dev` (or `npm run build`). There is no lint, typecheck, or test script.
@@ -23,21 +23,21 @@ Frontend only: `cd frontend && npm ci && npm run dev` (or `npm run build`). Ther
 
 ## Architecture boundaries
 
-- Pipeline: `backend/colorpass` (framework-independent) `ingest -> extract/signage -> checks -> report`. Django is a thin HTTP layer: `backend/api/views.py` -> `colorpass/service.py`.
-- `backend/devserver.py` is a stdlib fallback server with the same `/api/*` routes. When adding an endpoint, update both `api/urls.py`/`api/views.py` and `devserver.py`; update `frontend/src/api.js` too.
-- Django has **no ORM models and no migrations**. History is raw SQL in `colorpass/store.py`, which auto-creates its schema. Do not run `makemigrations`.
-- `DATABASE_URL` enables PostgreSQL history; without it the service falls back to files under `runs/web/<id>/`. Report files always live in `runs/`.
-- Checks run in background threads and keep status in process memory + `runs/web/<id>/status.json`. Production gunicorn must stay at **one worker** (threads are fine); multiple workers would break status sharing.
-- Rules, thresholds, and requirement texts belong in `backend/colorpass/data/rules.yaml`, not in Python or JS.
-- GigaChat is optional and is never the judge: code decides pass/fail from rules; the LLM only reads text/images and drafts conclusions. Preserve this invariant. With no `GIGACHAT_AUTH_KEY`, everything runs rules-only.
+- `processor/` owns everything file-related: `processor/colorpass` (framework-independent pipeline `ingest -> extract/signage -> checks -> report`, photo comparison, Excel) and `processor/worker` (Redis queue workers in `jobs.py`, package cross-checks in `package.py`, HTTP for files/uploads in `fileserver.py`, `runs/` layout in `storage.py`). Only processor mounts `runs/` and `dataset/`.
+- `backend/` (Django) is API + PostgreSQL only: packages, documents (status + report jsonb), findings, decisions, comparisons, LLM texts. It never opens PDFs or images. `backend/api/views.py` -> `backend/core/service.py`; storage in `backend/core/store.py` (raw SQL, auto-created schema; no ORM models, do not run `makemigrations`). Without `DATABASE_URL` it uses an in-memory store (dev only).
+- Backend ↔ processor only via Redis (`core/redisq.py` = copy of `processor/worker/redisq.py`; keep both in sync): heavy `check_package` jobs on `cp:jobs`; quick file ops with a reply on `cp:rpc` (`blocks`, `corners`, `compare`, `recalc`, `excel`, `samples`, `rules`, `archive`); results in `cp:result:*` + `cp:ready`, pulled into the DB by `service.sync()` on reads.
+- When adding an endpoint: backend `api/urls.py` + `api/views.py` + `core/service.py`; if it needs files, a processor RPC handler in `worker/jobs.py`; update `frontend/src/api.js`.
+- Frontend URLs: `/api` → backend, `/files` → processor (uploads, page images, Excel), `/chat` → chat (Caddy in prod, Vite proxy in dev).
+- Rules, thresholds, and requirement texts belong in `processor/colorpass/data/rules.yaml`, not in Python or JS.
+- LLMs live only in `chat/` (LM Studio primary, GigaChat fallback). Code decides pass/fail from rules; models only draft text and describe photos, and chat saves results through backend API. Preserve this invariant.
 
 ## Conventions
 
 - Comments, findings, report text, and UI strings are in Russian. Python: PEP 8 + type hints + `from __future__ import annotations`.
 - React: functional components, no UI library; styles in `frontend/src/styles.css`.
 - API routes have no trailing slash (`APPEND_SLASH = False`).
-- Python CLI must be run from `backend/` (it imports top-level `colorpass`); `python -m colorpass` resolves the repo root for `dataset/` and `runs/`.
-- `.env` is loaded manually by `colorpass/envfile.py`; real environment variables override it.
+- Python CLI must be run from `processor/` (it imports top-level `colorpass`); `python -m colorpass` resolves the repo root for `dataset/` and `runs/`.
+- `.env` is loaded manually by `envfile.py` (processor/colorpass and backend/core); real environment variables override it.
 
 ## Data
 

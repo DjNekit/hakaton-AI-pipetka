@@ -81,13 +81,26 @@ export default function PhotoCompare({ run, modelOn }) {
     setQuad(null);
   };
 
-  const chooseUpload = (file) => {
+  // своё фото загружается в сервис processor один раз; углы и сравнение ссылаются на него по uploadId
+  const chooseUpload = async (file) => {
     if (!file) return;
     if (photo && photo.kind === "upload") URL.revokeObjectURL(photo.url);
-    setPhoto({ kind: "upload", file, url: URL.createObjectURL(file), label: file.name });
+    const url = URL.createObjectURL(file);
+    setPhoto({ kind: "upload", file, url, label: file.name, uploadId: null });
     setNatural(null);
     setQuad(null);
+    setHint("Загружаю фото…");
+    try {
+      const { uploads } = await api.uploadFiles([file]);
+      const up = uploads.find((u) => u.kind === "image");
+      if (!up) throw new Error("нужен JPEG или PNG");
+      setPhoto((p) => (p && p.url === url ? { ...p, uploadId: up.id } : p));
+      setHint(null);
+    } catch (e) {
+      setHint(`Фото не загружено: ${e.message}`);
+    }
   };
+  const photoReady = photo && (photo.kind === "passport" || photo.uploadId);
 
   const onPhotoLoad = (e) => {
     const w = e.currentTarget.naturalWidth;
@@ -97,11 +110,11 @@ export default function PhotoCompare({ run, modelOn }) {
   };
 
   const autoCorners = async () => {
-    if (!photo) return;
+    if (!photoReady) return;
     setHint("Ищу углы фасада…");
     try {
       const res = await api.corners(run.id, {
-        photo: photo.kind === "upload" ? photo.file : null,
+        uploadId: photo.kind === "upload" ? photo.uploadId : null,
         photoBlock: photo.kind === "passport" ? photo.block : null,
       });
       setQuad(res.quad);
@@ -112,13 +125,13 @@ export default function PhotoCompare({ run, modelOn }) {
   };
 
   const submit = async () => {
-    if (!facade || !photo || !quad) return;
+    if (!facade || !photoReady || !quad) return;
     setBusy(true);
     setError(null);
     try {
       const res = await api.compare(run.id, {
         facade: facade.id,
-        photo: photo.kind === "upload" ? photo.file : null,
+        uploadId: photo.kind === "upload" ? photo.uploadId : null,
         photoBlock: photo.kind === "passport" ? photo.block : null,
         quad,
         rect,
@@ -196,7 +209,7 @@ export default function PhotoCompare({ run, modelOn }) {
           </label>
           {blocks.photos.length > 0 && (
             <>
-              <p className="pc-hint">или фото из фотофиксации паспорта:</p>
+              <p className="pc-hint">или фото из пакета и фотофиксации документа:</p>
               <div className="pc-thumbs pc-thumbs-photo">
                 {blocks.photos.map((b) => (
                   <button
@@ -225,12 +238,12 @@ export default function PhotoCompare({ run, modelOn }) {
             <QuadPicker src={photo.url} natural={natural} quad={quad} onLoad={onPhotoLoad} onChange={setQuad} />
           )}
           <div className="pc-actions">
-            <button type="button" className="btn btn-primary" disabled={!facade || !photo || !quad || busy} onClick={submit}>
+            <button type="button" className="btn btn-primary" disabled={!facade || !photoReady || !quad || busy} onClick={submit}>
               {busy ? "Сравниваю…" : "Сравнить"}
             </button>
             {photo && natural && (
               <>
-                <button type="button" className="btn btn-quiet" onClick={autoCorners}>
+                <button type="button" className="btn btn-quiet" onClick={autoCorners} disabled={!photoReady}>
                   Найти углы автоматически
                 </button>
                 <button type="button" className="btn btn-quiet" onClick={() => { setQuad(defaultQuad(natural[0], natural[1])); setHint(null); }}>

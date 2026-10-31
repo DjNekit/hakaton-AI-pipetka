@@ -1,6 +1,7 @@
 // Настройки сервиса chat — единственного места, где работают языковые модели.
 //
 //   BACKEND_URL=http://backend:8000          основной бэкенд (Django): данные проверок, сюда же сохраняются ответы модели
+//   FILES_URL=http://processor:8001/files    файлы документов (листы, развёртки, карты отличий) — сервис processor
 //
 //   Основная модель — LM Studio (или любой OpenAI-совместимый сервер), в проде — через ngrok:
 //   LOCAL_LLM_URL=https://<домен>.ngrok-free.dev/v1
@@ -39,6 +40,7 @@ function gigachatKey() {
 export const config = {
   port: Number(env("PORT", "3000")),
   backendUrl: env("BACKEND_URL", "http://backend:8000").replace(/\/+$/, ""),
+  filesUrl: env("FILES_URL", "http://processor:8001/files").replace(/\/+$/, ""),
   timeoutMs: Number(env("LLM_TIMEOUT", "300")) * 1000,
   maxSteps: Number(env("CHAT_MAX_STEPS", "8")),
   local: {

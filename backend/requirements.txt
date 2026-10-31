@@ -1,15 +1,6 @@
-# Ядро проверки
-pdfplumber>=0.11
-pypdfium2>=4.30
-numpy>=1.24
-opencv-python-headless>=4.8
-Pillow>=10.0
-PyYAML>=6.0
-# Веб (стек кейса)
+# Веб (стек кейса). PDF, изображения и OCR здесь нет — это сервис processor; модели — сервис chat.
 Django>=4.2,<5.0
-# История проверок в PostgreSQL (DATABASE_URL); без базы сервис работает на файлах
+# Пакеты, отчёты и журнал — PostgreSQL (DATABASE_URL)
 psycopg[binary]>=3.1
 # Продовый сервер (compose.prod.yml)
 gunicorn>=22.0
-# OCR сканов: tesseract с русским языком установлен в Docker-образе; без него коды берутся из OCR-слоя PDF
-pytesseract>=0.3.10

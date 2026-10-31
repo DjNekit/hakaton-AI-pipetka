@@ -1681,3 +1681,173 @@ button {
   padding: 0 6px;
   font-size: 12px;
 }
+
+/* ---------------------------------------------------------------- пакет документов */
+.back-link {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: var(--blueprint);
+  text-decoration: none;
+}
+.back-link:hover {
+  text-decoration: underline;
+}
+.pkg-draft {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pkg-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pkg-files li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.pkg-file-kind {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--pencil);
+}
+.pkg-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pkg-file-remove {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--pencil);
+  font-size: 16px;
+  line-height: 1;
+}
+.pkg-title {
+  padding: 7px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font: inherit;
+}
+.pkg-progress {
+  margin: 14px 0 0;
+}
+.pkg-section {
+  margin-top: 22px;
+}
+.pkg-section h2 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+.pkg-docs,
+.pkg-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pkg-doc {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: inherit;
+  text-decoration: none;
+}
+.pkg-doc:hover {
+  border-color: var(--ink);
+}
+.pkg-doc-main,
+.pkg-doc-state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pkg-doc-state {
+  text-align: right;
+  font-size: 14px;
+}
+.pkg-checks li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+}
+.pkg-checks .badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge.tone-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.badge.tone-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.badge.tone-error {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.badge.tone-muted {
+  background: var(--paper);
+  color: var(--muted);
+}
+.pkg-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+}
+.pkg-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.pkg-photos figure {
+  margin: 0;
+}
+.pkg-photos img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.pkg-photos figcaption {
+  font-size: 12px;
+  color: var(--pencil);
+}
+@media (max-width: 720px) {
+  .pkg-doc {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .pkg-doc-state {
+    grid-column: 2;
+    text-align: left;
+  }
+}

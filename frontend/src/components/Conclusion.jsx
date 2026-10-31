@@ -68,7 +68,7 @@ export default function Conclusion({ run, modelOn, onUpdate }) {
           <button type="button" className="btn btn-primary" onClick={copy}>
             {copied ? "Скопировано" : "Скопировать текст"}
           </button>
-          <a className="btn" href={api.fileUrl(run.id, "conclusion.md")} download={`заключение-${run.id}.md`}>
+          <a className="btn" href={api.conclusionMdUrl(run.id)} download={`заключение-${run.id}.md`}>
             Скачать .md
           </a>
           <a className="btn" href={api.exportExcelUrl(run.id)}>

@@ -166,7 +166,7 @@ export default function Report({ run, modelOn, onUpdate }) {
         <button type="button" className={`tab tab-link tab-chat${chatOpen ? " is-active" : ""}`} onClick={() => setChatOpen((o) => !o)}>
           Спросить ИИ
         </button>
-        <a className="tab" href={api.fileUrl(run.id, "report.json")} target="_blank" rel="noreferrer">
+        <a className="tab" href={api.reportJsonUrl(run.id)} target="_blank" rel="noreferrer">
           Отчёт JSON
         </a>
       </nav>

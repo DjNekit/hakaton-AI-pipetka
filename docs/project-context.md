@@ -11,19 +11,18 @@
 подведомственные организации), и проектировщики, готовящие паспорта к подаче.
 
 ## Tech Stack
-- Python 3.10+; ядро проверки — пакет `backend/colorpass` (не зависит от веб-фреймворка)
+- Python 3.10+; ядро проверки — пакет `processor/colorpass` (не зависит от веб-фреймворка), сервис `processor` — воркеры очереди Redis и файлы; бэкенд Django — API и PostgreSQL
 - PDF: pdfplumber (текст, таблицы, векторные примитивы), pypdfium2 (рендер листов)
 - Цвет и графика: numpy, OpenCV; собственная реализация CIEDE2000 и sRGB↔Lab
 - Веб: Django 4.2 (тонкий REST-слой `backend/api`), React 18 + Vite (`frontend/`)
 - ЛЛМ: GigaChat API (облако Сбера), ключ — `GIGACHAT_AUTH_KEY`; без ключа — проверка по правилам
 - Тесты: unittest (совместимы с pytest); метрики качества — `python -m colorpass eval`
-- Резервный сервер без Django: `backend/devserver.py` (только стандартная библиотека)
 
 ## Project Conventions
 
 ### Code Style
 - Python: PEP 8, type hints, `from __future__ import annotations`; комментарии и сообщения — на русском
-- Все пороги и тексты требований — в `backend/colorpass/data/rules.yaml`, не в коде
+- Все пороги и тексты требований — в `processor/colorpass/data/rules.yaml`, не в коде
 - JS: функциональные компоненты React, без UI-библиотек; стили — `frontend/src/styles.css`
 
 ### Architecture Patterns
