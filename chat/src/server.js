@@ -2,6 +2,8 @@
 //   POST /chat/checks/:id                              диалог по отчёту: поток AG-UI (SSE) для useChat на фронтенде
 //   POST /chat/checks/:id/conclusion                   заключение моделью → сохраняется в бэкенд, ответ — проверка
 //   POST /chat/checks/:id/comparisons/:cid/review      описание отличий на фото → сохраняется в бэкенд, ответ — сравнение
+//   POST /chat/checks/:id/advice                       что исправить перед подачей — для заявителя, не сохраняется
+//   POST /chat/assistant                               ассистент заявителя в новом интерфейсе (/new) — вызывает applications-api
 //   GET  /chat/health                                  доступен ли GigaChat
 // Данные проверок — из основного бэкенда (BACKEND_URL).
 import { serve } from "@hono/node-server";
@@ -10,7 +12,7 @@ import { chat, chatParamsFromRequest, toServerSentEventsResponse } from "@tansta
 import { config } from "./config.js";
 import { BackendError, backend } from "./backend.js";
 import { llm } from "./llm.js";
-import { reviewPhoto, writeConclusion } from "./tasks.js";
+import { reviewPhoto, writeAdvice, writeConclusion } from "./tasks.js";
 import { systemPrompt } from "./prompt.js";
 
 const ID = /^[0-9a-f]{12}$/;
@@ -43,10 +45,41 @@ app.post("/chat/checks/:id", async (c) => {
   return toServerSentEventsResponse(stream);
 });
 
+const ASSISTANT_PROMPT = [
+  "Ты — ассистент заявителя в сервисе «Колорпаспорт» (Москомархитектура). Заявитель готовит и подаёт документы:",
+  "паспорт колористического решения фасадов (ПП Москвы № 114-ПП), дизайн-проект размещения вывесок (№ 902-ПП),",
+  "проект изменения внешнего облика фасада. Помогай понять требования, состав документов и типичные ошибки.",
+  "Отвечай по-русски, коротко и по делу. Не выдумывай номера пунктов НПА; если не уверен — так и скажи.",
+].join("\n");
+
+app.post("/chat/assistant", async (c) => {
+  const model = await llm.dialogModel();
+  const { messages, threadId, runId } = await chatParamsFromRequest(c.req.raw);
+  const abortController = new AbortController();
+  c.req.raw.signal?.addEventListener("abort", () => abortController.abort());
+  const stream = chat({
+    adapter: model.adapter,
+    messages,
+    threadId,
+    runId,
+    systemPrompts: [ASSISTANT_PROMPT],
+    modelOptions: { temperature: 0.3 },
+    metadata: { provider: model.provider, model: model.model, assistant: true },
+    abortController,
+  });
+  return toServerSentEventsResponse(stream);
+});
+
 app.post("/chat/checks/:id/conclusion", async (c) => {
   const checkId = c.req.param("id");
   if (!ID.test(checkId)) return c.json({ error: "Неверный id проверки" }, 400);
   return c.json(await writeConclusion(checkId));
+});
+
+app.post("/chat/checks/:id/advice", async (c) => {
+  const checkId = c.req.param("id");
+  if (!ID.test(checkId)) return c.json({ error: "Неверный id проверки" }, 400);
+  return c.json(await writeAdvice(checkId));
 });
 
 app.post("/chat/checks/:id/comparisons/:cid/review", async (c) => {

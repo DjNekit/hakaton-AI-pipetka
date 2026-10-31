@@ -50,6 +50,10 @@ jobs:
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          # новый интерфейс (/new): свой секрет better-auth; пока секрета нет — берётся DJANGO_SECRET_KEY
+          PROTOTYPE_AUTH_SECRET: ${{ secrets.PROTOTYPE_AUTH_SECRET || secrets.DJANGO_SECRET_KEY }}
+          APPROVER_EMAILS: ${{ vars.APPROVER_EMAILS }}
+          NORMCONTROL_EMAILS: ${{ vars.NORMCONTROL_EMAILS }}
         run: |
           {
             echo "DOMAIN=$DOMAIN"
@@ -58,6 +62,9 @@ jobs:
             echo "GIGACHAT_MODEL=GigaChat-2-Max"
             echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
             echo "DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY"
+            echo "PROTOTYPE_AUTH_SECRET=$PROTOTYPE_AUTH_SECRET"
+            echo "APPROVER_EMAILS=$APPROVER_EMAILS"
+            echo "NORMCONTROL_EMAILS=$NORMCONTROL_EMAILS"
           } | ssh prod "umask 077 && cat > $APP_DIR/.env"
 
       - name: Сборка и запуск

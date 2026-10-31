@@ -81,7 +81,7 @@ export default function PhotoCompare({ run, modelOn }) {
     setQuad(null);
   };
 
-  // своё фото загружается в сервис processor один раз; углы и сравнение ссылаются на него по uploadId
+  // своё фото загружается в сервис checker один раз; углы и сравнение ссылаются на него по uploadId
   const chooseUpload = async (file) => {
     if (!file) return;
     if (photo && photo.kind === "upload") URL.revokeObjectURL(photo.url);

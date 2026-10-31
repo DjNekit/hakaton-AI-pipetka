@@ -1,5 +1,5 @@
 # Бэкенд: API для фронтенда и сервиса chat, PostgreSQL, журнал, решения инспектора.
-# Файлов и PDF здесь нет — их проверяет сервис processor (очередь Redis), модели — сервис chat.
+# Файлов и PDF здесь нет — их проверяет сервис checker (очередь Redis), модели — сервис chat.
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app/backend

@@ -1,6 +1,6 @@
 """Тонкий HTTP-слой над core.service (вся логика — в сервисном слое).
 
-Файлы (листы, развёртки, загрузки, Excel) отдаёт и принимает сервис processor по /files/…; бэкенд работает
+Файлы (листы, развёртки, загрузки, Excel) отдаёт и принимает сервис checker по /files/…; бэкенд работает
 только с данными: пакеты, отчёты, замечания, решения.
 """
 from __future__ import annotations
@@ -85,7 +85,7 @@ def sample_check(request, name: str):
 def packages(request):
     if request.method == "POST":
         data = _data(request)
-        pkg = service.create_package(data.get("uploads"), data.get("samples"), data.get("title", ""))
+        pkg = service.create_package(data.get("uploads"), data.get("samples"), data.get("title", ""), data.get("service_type"))
         return JsonResponse(pkg, status=202, **_JSON)
     return JsonResponse({"packages": service.list_packages()}, **_JSON)
 

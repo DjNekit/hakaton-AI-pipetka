@@ -1,0 +1,7 @@
+# Внутренний Caddy нового интерфейса: файлы лежат в /srv/new (собраны с base /new/), остальные пути SPA — на index.html.
+:80 {
+	encode zstd gzip
+	root * /srv
+	try_files {path} /new/index.html
+	file_server
+}

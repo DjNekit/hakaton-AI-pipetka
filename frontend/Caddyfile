@@ -13,16 +13,33 @@
 		}
 	}
 
-	# файлы документов и загрузка пакета — сервис processor
+	# файлы документов и загрузка пакета — сервис checker
 	handle /files/* {
 		request_body {
 			max_size 600MB
 		}
-		reverse_proxy processor:8001 {
+		reverse_proxy checker:8001 {
 			transport http {
 				read_timeout 10m
 			}
 		}
+	}
+
+	# новый интерфейс: статика — сервис prototype, его серверная часть — applications-api (ассистент отвечает потоком)
+	redir /new /new/ 308
+	handle /new/api/* {
+		request_body {
+			max_size 60MB
+		}
+		reverse_proxy applications-api:3100 {
+			flush_interval -1
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+	handle /new/* {
+		reverse_proxy prototype:80
 	}
 
 	# чат по отчёту — отдельный сервис; ответ идёт потоком (SSE), поэтому без буферизации

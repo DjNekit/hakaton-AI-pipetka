@@ -11,7 +11,7 @@
 подведомственные организации), и проектировщики, готовящие паспорта к подаче.
 
 ## Tech Stack
-- Python 3.10+; ядро проверки — пакет `processor/colorpass` (не зависит от веб-фреймворка), сервис `processor` — воркеры очереди Redis и файлы; бэкенд Django — API и PostgreSQL
+- Python 3.10+; ядро проверки — пакет `checker/colorpass` (не зависит от веб-фреймворка), сервис `checker` — воркеры очереди Redis и файлы; бэкенд Django — API и PostgreSQL
 - PDF: pdfplumber (текст, таблицы, векторные примитивы), pypdfium2 (рендер листов)
 - Цвет и графика: numpy, OpenCV; собственная реализация CIEDE2000 и sRGB↔Lab
 - Веб: Django 4.2 (тонкий REST-слой `backend/api`), React 18 + Vite (`frontend/`)
@@ -22,7 +22,7 @@
 
 ### Code Style
 - Python: PEP 8, type hints, `from __future__ import annotations`; комментарии и сообщения — на русском
-- Все пороги и тексты требований — в `processor/colorpass/data/rules.yaml`, не в коде
+- Все пороги и тексты требований — в `checker/colorpass/data/rules.yaml`, не в коде
 - JS: функциональные компоненты React, без UI-библиотек; стили — `frontend/src/styles.css`
 
 ### Architecture Patterns

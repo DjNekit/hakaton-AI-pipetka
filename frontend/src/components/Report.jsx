@@ -24,7 +24,8 @@ const TABS = [
 export default function Report({ run, modelOn, onUpdate }) {
   const report = run.report;
   const signage = report.document_kind === "signage";
-  const tabs = TABS.filter(([key]) => (signage ? key !== "table" : key !== "explication"));
+  const supporting = ["supporting", "facade"].includes(report.document_kind);
+  const tabs = TABS.filter(([key]) => supporting ? ["sheets", "conclusion", "photo"].includes(key) : (signage ? key !== "table" : key !== "explication"));
   const [tab, setTab] = useState("findings");
   const [selected, setSelected] = useState(null);
   const [page, setPage] = useState(null);
@@ -44,7 +45,7 @@ export default function Report({ run, modelOn, onUpdate }) {
     const first = activeFindings[0];
     setSelected(first ? first.id : null);
     setPage(first && first.page != null ? first.page : defaultPage);
-    setTab("findings");
+    setTab(supporting ? "sheets" : "findings");
   }, [run.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const select = (f) => {
@@ -102,9 +103,9 @@ export default function Report({ run, modelOn, onUpdate }) {
             <dd>{s.address || "не найден"}</dd>
           </div>
           <div>
-            <dt>{signage ? "Документ" : "Паспорт"}</dt>
+            <dt>{signage || supporting ? "Документ" : "Паспорт"}</dt>
             <dd>
-              {signage ? "Дизайн-проект вывесок (902-ПП)" : s.number ? `№ ${s.number}` : "номер не найден"}
+              {supporting ? "Часть пакета документов" : signage ? "Дизайн-проект вывесок (902-ПП)" : s.number ? `№ ${s.number}` : "номер не найден"}
               {!signage && s.date ? ` от ${s.date}` : ""}
             </dd>
           </div>
@@ -129,7 +130,7 @@ export default function Report({ run, modelOn, onUpdate }) {
           <div className="cell-wide">
             <dt>Требования</dt>
             <dd>
-              {passed} из {applicable} применимых выполнено
+              {supporting ? "Результаты проверки — в чек-листе пакета" : `${passed} из ${applicable} применимых выполнено`}
               {c.rules_skipped ? `, ${c.rules_skipped} не применимо` : ""}
             </dd>
           </div>

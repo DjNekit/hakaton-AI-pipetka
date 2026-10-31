@@ -1,5 +1,5 @@
-// Тонкий клиент API: бэкенд (Django: пакеты, отчёты, решения — backend/api/urls.py), сервис processor
-// (файлы: загрузка, листы, развёртки — processor/worker/fileserver.py) и сервис chat (модели — chat/src/server.js)
+// Тонкий клиент API: бэкенд (Django: пакеты, отчёты, решения — backend/api/urls.py), сервис checker
+// (файлы: загрузка, листы, развёртки — checker/worker/fileserver.py) и сервис chat (модели — chat/src/server.js)
 const BASE = "/api";
 const CHAT = "/chat";
 const FILES = "/files";
@@ -27,13 +27,13 @@ export const api = {
   rules: () => request("/rules"),
   samples: () => request("/samples").then((d) => d.samples),
 
-  // пакет документов одной заявки: файлы загружаются в processor, пакет создаёт бэкенд и ставит в очередь
+  // пакет документов одной заявки: файлы загружаются в checker, пакет создаёт бэкенд и ставит в очередь
   uploadFiles: (files) => {
     const fd = new FormData();
     for (const f of files) fd.append("files", f, f.name);
     return request("/uploads", { method: "POST", body: fd }, FILES);
   },
-  createPackage: ({ uploads = [], samples = [], title = "" }) => request("/packages", json("POST", { uploads, samples, title })),
+  createPackage: ({ uploads = [], samples = [], title = "", service_type = null }) => request("/packages", json("POST", { uploads, samples, title, service_type })),
   packages: () => request("/packages").then((d) => d.packages),
   package: (id) => request(`/packages/${id}`),
   checkSample: (name) => request(`/samples/${name}/check`, { method: "POST" }),
@@ -44,7 +44,7 @@ export const api = {
     request(`/checks/${id}/change_status`, json("POST", { finding_id: findingId, action, reason })),
   setDecision: (id, decision, note = "") => request(`/checks/${id}/decision`, json("POST", { decision, note })),
 
-  // сравнение фото с развёрткой (фото — загрузка в processor или фото из документа/пакета)
+  // сравнение фото с развёрткой (фото — загрузка в checker или фото из документа/пакета)
   blocks: (id) => request(`/checks/${id}/blocks`),
   comparisons: (id) => request(`/checks/${id}/comparisons`).then((d) => d.comparisons),
   compare: (id, { facade, uploadId, photoBlock, quad, rect }) =>
