@@ -1,15 +1,25 @@
-import { IconArrowLeft } from '@tabler/icons-react'
+import { IconArrowLeft, IconChevronRight } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { toast } from 'sonner'
 
 import {
   ApplicationNumber,
   applicationQueryOptions,
   ApplicationProperties,
   DecisionCard,
+  formatApplicationNumber,
+  VersionHistory,
 } from '@/entities/application'
+import { VersionCheckResult } from '@/features/application/precheck'
 import { useTranslation } from '@/shared/i18n'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/shared/ui/components/collapsible'
 import { Skeleton } from '@/shared/ui/components/skeleton'
+import { DraftEditor } from '@/widgets/application-draft'
 
 export const Route = createFileRoute('/_authenticated/applicant/$id')({
   component: ApplicationPage,
@@ -20,11 +30,29 @@ function ApplicationPage() {
   const { id } = Route.useParams()
   const { data, isPending, isError } = useQuery(applicationQueryOptions(id))
 
+  if (data?.status === 'draft') {
+    return (
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <DraftEditor
+          application={data}
+          onCreated={() => undefined}
+          onSubmitted={application =>
+            toast.success(
+              t('applicant.submit.success', {
+                number: formatApplicationNumber(application.number),
+              }),
+            )
+          }
+        />
+      </main>
+    )
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
       <Link
         to="/applicant"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
       >
         <IconArrowLeft className="size-4" />
         {t('application.back')}
@@ -50,6 +78,32 @@ function ApplicationPage() {
               {t('application.decision.title')}
             </h2>
             <DecisionCard decision={data.decision} />
+          </section>
+          <section className="flex flex-col gap-2">
+            <h2 className="text-sm font-medium">
+              {t('application.versions.title')}
+            </h2>
+            <VersionHistory
+              application={data}
+              showSummary
+              renderDetails={version =>
+                version.checked ? (
+                  <Collapsible>
+                    <CollapsibleTrigger className="group inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <IconChevronRight className="size-3.5 transition-transform group-aria-expanded:rotate-90" />
+                      {t('applicant.precheck.title')}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2">
+                      <VersionCheckResult
+                        applicationId={data.id}
+                        versionId={version.id}
+                        withAdvice={false}
+                      />
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : null
+              }
+            />
           </section>
         </>
       )}

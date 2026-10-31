@@ -10,6 +10,7 @@ import {
   checklistQueryOptions,
   DecisionCard,
   ReviewComparison,
+  VersionHistory,
   type Application,
   type ChecklistItem,
 } from '@/entities/application'
@@ -214,6 +215,11 @@ export function ApplicationReview({
       <NormcontrolWork application={data} />
     )
   const decision = <DecisionBlock application={data} role={role} />
+  const history = (
+    <Section title={t('application.versions.title')}>
+      <VersionHistory application={data} showSummary={role === 'normcontrol'} />
+    </Section>
+  )
 
   if (layout === 'panel') {
     return (
@@ -221,6 +227,7 @@ export function ApplicationReview({
         {properties}
         {work}
         {decision}
+        {history}
       </div>
     )
   }
@@ -233,6 +240,7 @@ export function ApplicationReview({
       <aside className="flex flex-col gap-6 lg:border-l lg:pl-8">
         {properties}
         {decision}
+        {history}
       </aside>
     </div>
   )

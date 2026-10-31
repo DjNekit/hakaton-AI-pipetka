@@ -1,7 +1,13 @@
 // Сервис applications-api: серверная логика нового интерфейса (клиент — prototype/, адрес /new).
 //   /new/api/auth/*                     better-auth: регистрация, вход, коды, сброс пароля
-//   GET/POST /new/api/applications      заявки (заявитель — свои, согласующий и нормоконтролёр — все)
+//   GET /new/api/applications           заявки (заявитель — свои с черновиками, сотрудники — поданные)
 //   GET /new/api/applications/:id       заявка (согласующему — без проверки ИИ, заявителю — только решение)
+//   POST /new/api/applications/drafts               черновик + версия 1 файла, проверка checker
+//   POST /new/api/applications/:id/versions         новая версия файла черновика, проверка checker
+//   GET /new/api/applications/:id/versions/:vid/check   ход и замечания проверки версии
+//   POST /new/api/applications/:id/versions/:vid/advice что исправить — текст GigaChat (сервис chat)
+//   GET /new/api/applications/:id/versions/:vid/file    PDF версии
+//   POST /new/api/applications/:id/submit           отправить выбранную версию на автоматическую проверку
 //   GET /new/api/applications/:id/checklist        пункты чек-листа для ручной проверки (после автоматической)
 //   POST /new/api/applications/:id/approver-review проверка согласующего (независимо от ИИ)
 //   POST /new/api/applications/:id/decision        решение нормоконтролёра
@@ -16,8 +22,13 @@ import { Hono } from 'hono'
 import { checklistFor, runAiReview } from './ai-review'
 import {
   canAccess,
-  createApplication,
+  addVersion,
+  createDraft,
   decideApplication,
+  findVersion,
+  readVersionFile,
+  setVersionSummary,
+  submitDraft,
   forViewer,
   getApplication,
   listApplications,
@@ -27,10 +38,12 @@ import {
 import { auth } from './auth'
 import { getCurrentUser, jsonError } from './current-user'
 import { readMailbox } from './mailbox'
+import { adviceFor, readCheck, startCheck, UpstreamError } from './precheck'
 import {
   approverReviewSchema,
   decisionSchema,
-  documentTypeSchema,
+  draftFieldsSchema,
+  submitSchema,
 } from './model'
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -57,29 +70,6 @@ app.get('/applications', async c => {
   )
 })
 
-app.post('/applications', async c => {
-  const user = await getCurrentUser(c.req.raw)
-  if (!user) return jsonError(401, 'unauthorized')
-  if (user.role !== 'applicant') return jsonError(403, 'forbidden')
-  const form = await c.req.raw.formData()
-  const documentType = documentTypeSchema.safeParse(form.get('documentType'))
-  const address = text(form.get('address'))
-  const description = text(form.get('description'))
-  const file = form.get('file')
-  if (!documentType.success || !address) return jsonError(400, 'invalid_fields')
-  if (!(file instanceof File) || file.type !== 'application/pdf') {
-    return jsonError(400, 'invalid_file')
-  }
-  if (file.size > MAX_FILE_SIZE) return jsonError(400, 'file_too_large')
-  const application = await createApplication(
-    user,
-    { documentType: documentType.data, address, description },
-    file,
-  )
-  void runAiReview(application.id)
-  return c.json(forViewer(user, application), 201)
-})
-
 app.get('/applications/:id', async c => {
   const user = await getCurrentUser(c.req.raw)
   if (!user) return jsonError(401, 'unauthorized')
@@ -88,6 +78,138 @@ app.get('/applications/:id', async c => {
     return jsonError(404, 'not_found')
   }
   return c.json(forViewer(user, application))
+})
+
+async function readUpload(request: Request) {
+  const form = await request.formData()
+  const fields = draftFieldsSchema.safeParse({
+    documentType: form.get('documentType'),
+    address: text(form.get('address')),
+    description: text(form.get('description')),
+  })
+  const file = form.get('file')
+  if (!fields.success) return { error: 'invalid_fields' as const }
+  if (!(file instanceof File) || file.type !== 'application/pdf') {
+    return { error: 'invalid_file' as const }
+  }
+  if (file.size > MAX_FILE_SIZE) return { error: 'file_too_large' as const }
+  return { fields: fields.data, file }
+}
+
+function upstreamError(error: unknown) {
+  if (error instanceof UpstreamError) return jsonError(error.status, error.message)
+  throw error
+}
+
+async function ownDraft(request: Request, id: string) {
+  const user = await getCurrentUser(request)
+  if (!user) return { response: jsonError(401, 'unauthorized') }
+  const application = getApplication(id)
+  if (!application || application.applicantId !== user.id) {
+    return { response: jsonError(404, 'not_found') }
+  }
+  return { user, application }
+}
+
+app.post('/applications/drafts', async c => {
+  const user = await getCurrentUser(c.req.raw)
+  if (!user) return jsonError(401, 'unauthorized')
+  if (user.role !== 'applicant') return jsonError(403, 'forbidden')
+  const upload = await readUpload(c.req.raw)
+  if (upload.error) return jsonError(400, upload.error)
+  try {
+    const packageId = await startCheck(upload.file)
+    const draft = await createDraft(user, upload.fields, upload.file, packageId)
+    return c.json(forViewer(user, draft), 201)
+  } catch (error) {
+    return upstreamError(error)
+  }
+})
+
+app.post('/applications/:id/versions', async c => {
+  const owned = await ownDraft(c.req.raw, c.req.param('id'))
+  if (owned.response) return owned.response
+  if (owned.application.status !== 'draft') return jsonError(409, 'invalid_state')
+  const upload = await readUpload(c.req.raw)
+  if (upload.error) return jsonError(400, upload.error)
+  try {
+    const packageId = await startCheck(upload.file)
+    const draft = await addVersion(
+      owned.application.id,
+      upload.fields,
+      upload.file,
+      packageId,
+    )
+    return c.json(forViewer(owned.user, draft), 201)
+  } catch (error) {
+    return upstreamError(error)
+  }
+})
+
+app.get('/applications/:id/versions/:vid/check', async c => {
+  const owned = await ownDraft(c.req.raw, c.req.param('id'))
+  if (owned.response) return owned.response
+  const version = findVersion(owned.application.id, c.req.param('vid'))
+  if (!version) return jsonError(404, 'not_found')
+  if (!version.packageId) return jsonError(404, 'not_checked')
+  try {
+    const status = await readCheck(version.packageId)
+    if (status.result && !version.summary) {
+      setVersionSummary(version.id, {
+        errors: status.result.findings.filter(f => f.severity === 'error').length,
+        warnings: status.result.findings.filter(f => f.severity === 'warning')
+          .length,
+      })
+    }
+    return c.json(status)
+  } catch (error) {
+    return upstreamError(error)
+  }
+})
+
+app.post('/applications/:id/versions/:vid/advice', async c => {
+  const owned = await ownDraft(c.req.raw, c.req.param('id'))
+  if (owned.response) return owned.response
+  const version = findVersion(owned.application.id, c.req.param('vid'))
+  if (!version?.packageId) return jsonError(404, 'not_found')
+  try {
+    const status = await readCheck(version.packageId)
+    if (!status.result) return jsonError(409, 'not_ready')
+    return c.json(await adviceFor(status.result.checkId))
+  } catch (error) {
+    return upstreamError(error)
+  }
+})
+
+app.get('/applications/:id/versions/:vid/file', async c => {
+  const user = await getCurrentUser(c.req.raw)
+  if (!user) return jsonError(401, 'unauthorized')
+  const application = getApplication(c.req.param('id'))
+  if (!application || !canAccess(user, application)) {
+    return jsonError(404, 'not_found')
+  }
+  const file = readVersionFile(application.id, c.req.param('vid'))
+  if (!file) return jsonError(404, 'not_found')
+  return new Response(new Uint8Array(file.data), {
+    headers: {
+      'content-type': 'application/pdf',
+      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    },
+  })
+})
+
+app.post('/applications/:id/submit', async c => {
+  const owned = await ownDraft(c.req.raw, c.req.param('id'))
+  if (owned.response) return owned.response
+  const body = submitSchema.safeParse(await c.req.json().catch(() => null))
+  if (!body.success) return jsonError(400, 'invalid_fields')
+  const { versionId, ...fields } = body.data
+  const result = submitDraft(owned.application.id, versionId, fields)
+  if (result.error) {
+    return jsonError(result.error === 'not_found' ? 404 : 409, result.error)
+  }
+  void runAiReview(result.application.id)
+  return c.json(forViewer(owned.user, result.application))
 })
 
 app.get('/applications/:id/checklist', async c => {

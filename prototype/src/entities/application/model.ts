@@ -4,6 +4,7 @@ import { apiUrl, requestJson } from '@/shared/api'
 import { z } from '@/shared/i18n'
 
 export const APPLICATION_STATUSES = [
+  'draft',
   'ai_check',
   'review',
   'normcontrol',
@@ -11,6 +12,10 @@ export const APPLICATION_STATUSES = [
   'rejected',
 ] as const
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
+
+export const STAFF_STATUSES = APPLICATION_STATUSES.filter(
+  status => status !== 'draft',
+)
 
 export const VERDICTS = [
   'violation',
@@ -72,6 +77,20 @@ export interface Decision {
   decidedAt: string
 }
 
+export interface VersionSummary {
+  errors: number
+  warnings: number
+}
+
+export interface ApplicationVersion {
+  id: string
+  version: number
+  fileName: string
+  createdAt: string
+  checked: boolean
+  summary: VersionSummary | null
+}
+
 export interface ChecklistItem {
   id: string
   section: string
@@ -99,6 +118,8 @@ export interface Application {
   aiReview: AiReview | null
   approverReview: ApproverReview | null
   decision: Decision | null
+  versions: ApplicationVersion[]
+  submittedVersionId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -109,6 +130,10 @@ export function formatApplicationNumber(number: number) {
 
 export function applicationFileUrl(id: string) {
   return apiUrl(`/applications/${id}/file`)
+}
+
+export function versionFileUrl(applicationId: string, versionId: string) {
+  return apiUrl(`/applications/${applicationId}/versions/${versionId}/file`)
 }
 
 export const applicationKeys = {

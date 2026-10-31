@@ -2,11 +2,17 @@ import { DOCUMENT_TYPES } from '@/entities/application'
 import { useTranslation } from '@/shared/i18n'
 import { FieldDescription } from '@/shared/ui/components/field'
 
-import { submitApplicationSchema, useSubmitApplicationForm } from './model'
+import { draftSchema, fileValidator, useDraftForm } from './model'
 
-type Form = ReturnType<typeof useSubmitApplicationForm>
+type Form = ReturnType<typeof useDraftForm>
 
-export function SubmitApplicationFields({ form }: { form: Form }) {
+export function DraftFields({
+  form,
+  fileKey,
+}: {
+  form: Form
+  fileKey: string
+}) {
   const { t } = useTranslation()
   const options = DOCUMENT_TYPES.map(value => ({
     value,
@@ -17,7 +23,7 @@ export function SubmitApplicationFields({ form }: { form: Form }) {
     <>
       <form.AppField
         name="documentType"
-        validators={{ onDynamic: submitApplicationSchema.shape.documentType }}
+        validators={{ onDynamic: draftSchema.shape.documentType }}
         children={field => (
           <field.Root>
             <field.Label>{t('application.fields.documentType')}</field.Label>
@@ -28,7 +34,7 @@ export function SubmitApplicationFields({ form }: { form: Form }) {
       />
       <form.AppField
         name="address"
-        validators={{ onDynamic: submitApplicationSchema.shape.address }}
+        validators={{ onDynamic: draftSchema.shape.address }}
         children={field => (
           <field.Root>
             <field.Label>{t('application.fields.address')}</field.Label>
@@ -41,7 +47,7 @@ export function SubmitApplicationFields({ form }: { form: Form }) {
       />
       <form.AppField
         name="description"
-        validators={{ onDynamic: submitApplicationSchema.shape.description }}
+        validators={{ onDynamic: draftSchema.shape.description }}
         children={field => (
           <field.Root>
             <field.Label>{t('application.fields.description')}</field.Label>
@@ -53,8 +59,9 @@ export function SubmitApplicationFields({ form }: { form: Form }) {
         )}
       />
       <form.AppField
+        key={fileKey}
         name="file"
-        validators={{ onDynamic: submitApplicationSchema.shape.file }}
+        validators={{ onDynamic: fileValidator }}
         children={field => (
           <field.Root>
             <field.Label>{t('application.fields.file')}</field.Label>

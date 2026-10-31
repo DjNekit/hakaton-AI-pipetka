@@ -9,6 +9,7 @@ export function toRole(value: unknown): Role {
 }
 
 export const APPLICATION_STATUSES = [
+  'draft',
   'ai_check',
   'review',
   'normcontrol',
@@ -62,9 +63,36 @@ export interface Application {
   aiReview: AiReview | null
   approverReview: ApproverReview | null
   decision: Decision | null
+  versions: ApplicationVersion[]
+  submittedVersionId: string | null
   createdAt: string
   updatedAt: string
 }
+
+export interface VersionSummary {
+  errors: number
+  warnings: number
+}
+
+export interface ApplicationVersion {
+  id: string
+  version: number
+  fileName: string
+  createdAt: string
+  checked: boolean
+  summary: VersionSummary | null
+}
+
+export const draftFieldsSchema = z.object({
+  documentType: documentTypeSchema,
+  address: z.string().trim().max(300),
+  description: z.string().trim().max(2000),
+})
+
+export const submitSchema = draftFieldsSchema.extend({
+  versionId: z.string(),
+  address: z.string().trim().min(1).max(300),
+})
 
 export interface ReviewItem {
   id: string

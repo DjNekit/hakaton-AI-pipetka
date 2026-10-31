@@ -107,6 +107,8 @@ services:
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
       NORMCONTROL_EMAILS: ${NORMCONTROL_EMAILS:-}
       CHAT_URL: http://chat:3000
+      BACKEND_URL: http://backend:8000
+      FILES_URL: http://checker:8001/files
     volumes:
       - ./applications-api/src:/app/src    # код — с диска
       - applications-data:/data            # SQLite и загруженные PDF

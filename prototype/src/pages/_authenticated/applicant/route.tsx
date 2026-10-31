@@ -19,7 +19,6 @@ function Layout() {
   const nav = [
     { to: '/applicant', label: t('nav.applications'), exact: true },
     { to: '/applicant/new', label: t('nav.newApplication') },
-    { to: '/applicant/assistant', label: t('nav.assistant') },
   ]
 
   return (

@@ -11,11 +11,11 @@ export default {
     normcontrol: 'Нормоконтроль',
     applications: 'Мои заявки',
     newApplication: 'Новая заявка',
-    assistant: 'Ассистент',
     board: 'Заявки',
   },
   application: {
     status: {
+      draft: 'Черновик',
       ai_check: 'Автоматическая проверка',
       review: 'Ручная проверка',
       normcontrol: 'Нормоконтроль',
@@ -87,6 +87,16 @@ export default {
     loadError: 'Не удалось загрузить заявки.',
     back: 'Назад',
     openPage: 'Открыть страницей',
+    versions: {
+      title: 'История файлов',
+      version: 'Версия {{version}}',
+      submitted: 'Отправлена',
+      checking: 'проверяется',
+      notChecked: 'без проверки',
+      clean: 'без замечаний',
+      issues: 'ошибок {{errors}}, предупреждений {{warnings}}',
+      open: 'Открыть PDF',
+    },
     closePanel: 'Закрыть',
   },
   applicant: {
@@ -94,6 +104,39 @@ export default {
       title: 'Мои заявки',
       emptyTitle: 'Заявок пока нет',
       emptyDescription: 'Подайте первую заявку на согласование.',
+    },
+    draft: {
+      title: 'Черновик {{number}}',
+      description:
+        'Заполните заявку и проверьте PDF. Отправить можно после проверки — любую из версий файла.',
+      check: 'Проверить',
+      checkNew: 'Проверить новую версию',
+      submit: 'Отправить',
+      submitAnyway: 'Отправить несмотря на замечания',
+      uploadNew: 'Загрузить новый файл',
+      empty:
+        'Выберите PDF слева и нажмите «Проверить» — здесь появятся замечания, рекомендации и версии файла.',
+      saved: 'Черновик сохранён',
+    },
+    precheck: {
+      title: 'Проверка перед отправкой',
+      description:
+        'Автоматически проверим документ по 114-ПП и 902-ПП и подскажем, что исправить.',
+      run: 'Проверить документ',
+      rerun: 'Проверить ещё раз',
+      queued: 'В очереди на проверку',
+      failed: 'Не удалось проверить документ. Попробуйте ещё раз.',
+      clean: 'Замечаний нет — документ можно подавать.',
+      summary: 'Ошибок: {{errors}}, предупреждений: {{warnings}}.',
+      page: 'лист {{page}}',
+      expected: 'Ожидалось',
+      actual: 'В документе',
+      adviceTitle: 'Что исправить',
+      adviceLoading: 'Готовим рекомендации…',
+      adviceUnavailable:
+        'Рекомендации сейчас недоступны — ниже список замечаний.',
+      submitWarning:
+        'Проверка нашла ошибок: {{count}}. Заявку можно подать, но её могут вернуть.',
     },
     submit: {
       title: 'Новая заявка',
@@ -105,6 +148,7 @@ export default {
       success: 'Заявка {{number}} подана',
       fileHint: 'Только PDF, до 50 МБ',
       errors: {
+        checker_unavailable: 'Сервис проверки недоступен',
         invalid_file: 'Нужен PDF-файл',
         file_too_large: 'Файл больше 50 МБ',
         invalid_fields: 'Проверьте поля формы',
@@ -258,11 +302,6 @@ export default {
     fileRequired: 'Прикрепите PDF-файл',
     pdfOnly: 'Нужен PDF-файл',
     fileTooLarge: 'Файл больше 50 МБ',
-  },
-  chat: {
-    placeholder: 'Сообщение',
-    send: 'Отправить',
-    stop: 'Стоп',
   },
   common: {
     connectionError: {

@@ -24,7 +24,6 @@ import { Route as AuthSignInCodeRouteImport } from './../../pages/_auth/sign-in/
 import { Route as AuthSignInPasswordRouteImport } from './../../pages/_auth/sign-in/password'
 import { Route as AuthenticatedApplicantIndexRouteImport } from './../../pages/_authenticated/applicant/index'
 import { Route as AuthenticatedApplicantIdRouteImport } from './../../pages/_authenticated/applicant/$id'
-import { Route as AuthenticatedApplicantAssistantRouteImport } from './../../pages/_authenticated/applicant/assistant'
 import { Route as AuthenticatedApplicantNewRouteImport } from './../../pages/_authenticated/applicant/new'
 import { Route as AuthenticatedApproverIndexRouteImport } from './../../pages/_authenticated/approver/index'
 import { Route as AuthenticatedApproverIdRouteImport } from './../../pages/_authenticated/approver/$id'
@@ -109,12 +108,6 @@ const AuthenticatedApplicantIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedApplicantRouteRoute,
   } as any)
-const AuthenticatedApplicantAssistantRoute =
-  AuthenticatedApplicantAssistantRouteImport.update({
-    id: '/assistant',
-    path: '/assistant',
-    getParentRoute: () => AuthenticatedApplicantRouteRoute,
-  } as any)
 const AuthenticatedApplicantNewRoute =
   AuthenticatedApplicantNewRouteImport.update({
     id: '/new',
@@ -157,7 +150,6 @@ export interface FileRoutesByFullPath {
   '/sign-in/code': typeof AuthSignInCodeRoute
   '/sign-in/password': typeof AuthSignInPasswordRoute
   '/applicant/$id': typeof AuthenticatedApplicantIdRoute
-  '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
   '/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
@@ -175,7 +167,6 @@ export interface FileRoutesByTo {
   '/sign-in/code': typeof AuthSignInCodeRoute
   '/sign-in/password': typeof AuthSignInPasswordRoute
   '/applicant/$id': typeof AuthenticatedApplicantIdRoute
-  '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
   '/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
@@ -199,7 +190,6 @@ export interface FileRoutesById {
   '/_auth/sign-in/code': typeof AuthSignInCodeRoute
   '/_auth/sign-in/password': typeof AuthSignInPasswordRoute
   '/_authenticated/applicant/$id': typeof AuthenticatedApplicantIdRoute
-  '/_authenticated/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/_authenticated/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/_authenticated/approver/$id': typeof AuthenticatedApproverIdRoute
   '/_authenticated/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
@@ -222,7 +212,6 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/sign-in/password'
     | '/applicant/$id'
-    | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
     | '/normcontrol/$id'
@@ -240,7 +229,6 @@ export interface FileRouteTypes {
     | '/sign-in/code'
     | '/sign-in/password'
     | '/applicant/$id'
-    | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
     | '/normcontrol/$id'
@@ -263,7 +251,6 @@ export interface FileRouteTypes {
     | '/_auth/sign-in/code'
     | '/_auth/sign-in/password'
     | '/_authenticated/applicant/$id'
-    | '/_authenticated/applicant/assistant'
     | '/_authenticated/applicant/new'
     | '/_authenticated/approver/$id'
     | '/_authenticated/normcontrol/$id'
@@ -385,13 +372,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApplicantIdRouteImport
       parentRoute: typeof AuthenticatedApplicantRouteRoute
     }
-    '/_authenticated/applicant/assistant': {
-      id: '/_authenticated/applicant/assistant'
-      path: '/assistant'
-      fullPath: '/applicant/assistant'
-      preLoaderRoute: typeof AuthenticatedApplicantAssistantRouteImport
-      parentRoute: typeof AuthenticatedApplicantRouteRoute
-    }
     '/_authenticated/applicant/new': {
       id: '/_authenticated/applicant/new'
       path: '/new'
@@ -454,7 +434,6 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface AuthenticatedApplicantRouteRouteChildren {
   AuthenticatedApplicantIdRoute: typeof AuthenticatedApplicantIdRoute
-  AuthenticatedApplicantAssistantRoute: typeof AuthenticatedApplicantAssistantRoute
   AuthenticatedApplicantNewRoute: typeof AuthenticatedApplicantNewRoute
   AuthenticatedApplicantIndexRoute: typeof AuthenticatedApplicantIndexRoute
 }
@@ -462,7 +441,6 @@ interface AuthenticatedApplicantRouteRouteChildren {
 const AuthenticatedApplicantRouteRouteChildren: AuthenticatedApplicantRouteRouteChildren =
   {
     AuthenticatedApplicantIdRoute: AuthenticatedApplicantIdRoute,
-    AuthenticatedApplicantAssistantRoute: AuthenticatedApplicantAssistantRoute,
     AuthenticatedApplicantNewRoute: AuthenticatedApplicantNewRoute,
     AuthenticatedApplicantIndexRoute: AuthenticatedApplicantIndexRoute,
   }

@@ -8,20 +8,42 @@ import {
   APPLICATION_STATUSES,
   type AiReview,
   type Application,
+  type ApplicationVersion,
   type ApproverReview,
   type Decision,
   type DocumentType,
   type ReviewItem,
+  type VersionSummary,
 } from './model'
 
 import type { CurrentUser } from './current-user'
 
-type Row = Omit<Application, 'aiReview' | 'approverReview' | 'decision'> & {
+type Row = Omit<
+  Application,
+  'aiReview' | 'approverReview' | 'decision' | 'versions'
+> & {
   filePath: string
   reviewComment: string
   aiReview: string | null
   approverReview: string | null
   decision: string | null
+}
+
+interface VersionRow {
+  id: string
+  applicationId: string
+  version: number
+  fileName: string
+  filePath: string
+  packageId: string
+  summary: string | null
+  createdAt: string
+}
+
+export interface DraftFields {
+  documentType: DocumentType
+  address: string
+  description: string
 }
 
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR ?? './uploads')
@@ -52,11 +74,38 @@ function connection() {
   const columns = db
     .prepare<[], { name: string }>('pragma table_info(application)')
     .all()
-  for (const column of ['aiReview', 'approverReview', 'decision']) {
+  for (const column of [
+    'aiReview',
+    'approverReview',
+    'decision',
+    'submittedVersionId',
+  ]) {
     if (!columns.some(existing => existing.name === column)) {
       db.exec(`alter table application add column ${column} text`)
     }
   }
+  db.exec(`
+    create table if not exists application_version (
+      id text primary key,
+      applicationId text not null,
+      version integer not null,
+      fileName text not null,
+      filePath text not null,
+      packageId text not null default '',
+      summary text,
+      createdAt text not null
+    )
+  `)
+  db.exec(`
+    insert into application_version (id, applicationId, version, fileName, filePath, packageId, createdAt)
+    select lower(hex(randomblob(16))), id, 1, fileName, filePath, '', createdAt from application
+    where not exists (select 1 from application_version v where v.applicationId = application.id)
+  `)
+  db.exec(`
+    update application set submittedVersionId = (
+      select v.id from application_version v where v.applicationId = application.id order by v.version desc limit 1
+    ) where submittedVersionId is null and status != 'draft'
+  `)
   const known = APPLICATION_STATUSES.map(status => `'${status}'`).join(', ')
   db.exec(
     `update application set status = 'review' where status not in (${known})`,
@@ -66,6 +115,25 @@ function connection() {
 
 function parse<T>(value: string | null) {
   return value ? (JSON.parse(value) as T) : null
+}
+
+function toVersion(row: VersionRow): ApplicationVersion {
+  return {
+    id: row.id,
+    version: row.version,
+    fileName: row.fileName,
+    createdAt: row.createdAt,
+    checked: Boolean(row.packageId),
+    summary: parse<VersionSummary>(row.summary),
+  }
+}
+
+function versionRows(applicationId: string) {
+  return connection()
+    .prepare<[string], VersionRow>(
+      'select * from application_version where applicationId = ? order by version desc',
+    )
+    .all(applicationId)
 }
 
 function toApplication({
@@ -81,6 +149,7 @@ function toApplication({
     aiReview: parse<AiReview>(aiReview),
     approverReview: parse<ApproverReview>(approverReview),
     decision: parse<Decision>(decision),
+    versions: versionRows(rest.id).map(toVersion),
   }
 }
 
@@ -92,7 +161,9 @@ export function listApplications(filter: { applicantId?: string } = {}) {
         )
         .all(filter.applicantId)
     : connection()
-        .prepare<[], Row>('select * from application order by number desc')
+        .prepare<[], Row>(
+          "select * from application where status != 'draft' order by number desc",
+        )
         .all()
   return rows.map(toApplication)
 }
@@ -108,17 +179,51 @@ export function getApplication(id: string) {
   return row ? toApplication(row) : undefined
 }
 
-export async function createApplication(
-  user: CurrentUser,
-  input: { documentType: DocumentType; address: string; description: string },
-  file: File,
-) {
-  const id = randomUUID()
+async function storeFile(id: string, file: File) {
   mkdirSync(UPLOADS_DIR, { recursive: true })
   const filePath = path.join(UPLOADS_DIR, `${id}.pdf`)
   writeFileSync(filePath, Buffer.from(await file.arrayBuffer()))
+  return filePath
+}
+
+function insertVersion(
+  applicationId: string,
+  file: { name: string; path: string },
+  packageId: string,
+) {
+  const id = randomUUID()
+  const { next } = connection()
+    .prepare<[string], { next: number }>(
+      'select coalesce(max(version), 0) + 1 as next from application_version where applicationId = ?',
+    )
+    .get(applicationId)!
+  connection()
+    .prepare(
+      `insert into application_version (id, applicationId, version, fileName, filePath, packageId, createdAt)
+       values (@id, @applicationId, @version, @fileName, @filePath, @packageId, @createdAt)`,
+    )
+    .run({
+      id,
+      applicationId,
+      version: next,
+      fileName: file.name,
+      filePath: file.path,
+      packageId,
+      createdAt: new Date().toISOString(),
+    })
+  return id
+}
+
+export async function createDraft(
+  user: CurrentUser,
+  input: DraftFields,
+  file: File,
+  packageId: string,
+) {
+  const id = randomUUID()
+  const filePath = await storeFile(randomUUID(), file)
   const now = new Date().toISOString()
-  const insert = connection().transaction(() => {
+  connection().transaction(() => {
     const { next } = connection()
       .prepare<[], { next: number }>(
         'select coalesce(max(number), 0) + 1 as next from application',
@@ -127,7 +232,7 @@ export async function createApplication(
     connection()
       .prepare(
         `insert into application (id, number, applicantId, applicantName, applicantEmail, documentType, address, description, fileName, filePath, status, reviewComment, createdAt, updatedAt)
-         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'ai_check', '', @now, @now)`,
+         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'draft', '', @now, @now)`,
       )
       .run({
         id,
@@ -140,9 +245,57 @@ export async function createApplication(
         filePath,
         now,
       })
-  })
-  insert()
+    insertVersion(id, { name: file.name, path: filePath }, packageId)
+  })()
   return getApplication(id)!
+}
+
+export async function addVersion(
+  id: string,
+  input: DraftFields,
+  file: File,
+  packageId: string,
+) {
+  const filePath = await storeFile(randomUUID(), file)
+  connection().transaction(() => {
+    insertVersion(id, { name: file.name, path: filePath }, packageId)
+    touch(id, { ...input, fileName: file.name, filePath })
+  })()
+  return getApplication(id)!
+}
+
+export function findVersion(applicationId: string, versionId: string) {
+  const row = connection()
+    .prepare<[string], VersionRow>('select * from application_version where id = ?')
+    .get(versionId)
+  return row && row.applicationId === applicationId ? row : undefined
+}
+
+export function setVersionSummary(versionId: string, summary: VersionSummary) {
+  connection()
+    .prepare('update application_version set summary = ? where id = ?')
+    .run(JSON.stringify(summary), versionId)
+}
+
+export function readVersionFile(applicationId: string, versionId: string) {
+  const row = findVersion(applicationId, versionId)
+  return row ? { name: row.fileName, data: readFileSync(row.filePath) } : undefined
+}
+
+export function submitDraft(id: string, versionId: string, input: DraftFields) {
+  const application = getApplication(id)
+  if (!application) return { error: 'not_found' as const }
+  if (application.status !== 'draft') return { error: 'invalid_state' as const }
+  const version = findVersion(id, versionId)
+  if (!version) return { error: 'not_found' as const }
+  touch(id, {
+    ...input,
+    fileName: version.fileName,
+    filePath: version.filePath,
+    submittedVersionId: version.id,
+    status: 'ai_check',
+  })
+  return { application: getApplication(id)! }
 }
 
 function touch(id: string, fields: Record<string, string>) {
@@ -220,10 +373,20 @@ export function forViewer(
   application: Application,
 ): Application {
   if (user.role === 'normcontrol') return application
-  if (user.role === 'approver') return { ...application, aiReview: null }
+  if (user.role === 'approver') {
+    return {
+      ...application,
+      aiReview: null,
+      versions: application.versions.map(version => ({
+        ...version,
+        summary: null,
+      })),
+    }
+  }
   return { ...application, aiReview: null, approverReview: null }
 }
 
 export function canAccess(user: CurrentUser, application: Application) {
-  return user.role !== 'applicant' || application.applicantId === user.id
+  if (user.role === 'applicant') return application.applicantId === user.id
+  return application.status !== 'draft'
 }
