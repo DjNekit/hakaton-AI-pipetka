@@ -27,7 +27,7 @@ PAGE_KINDS = {
 }
 
 _KIND_PATTERNS = [
-    ("finish_table", [r"таблица отделки", r"ведомость отделки", r"марка цвета по палитрам", r"окраска и отделка"]),
+    ("finish_table", [r"таблица отделки", r"ведомость отделки", r"марка цвета по палитрам", r"окраска и отделка", r"отделочные материалы в соответствии с колористическим решением"]),
     ("facade", [r"разв[её]ртк\w* фасад", r"\bфасад\w* \S+[–-]\S+", r"фасады объекта", r"^iv\.?\s+фасад", r"чертеж\w* фасад"]),
     ("photo", [r"фотофиксац"]),
     ("general", [r"общие сведения"]),
@@ -37,6 +37,7 @@ _KIND_PATTERNS = [
         [
             r"архитектурн\w* характеристик",
             r"архитектурно-градостроительн\w* характеристик",
+            r"архитектурно-художественн\w* характеристик",
             r"пояснительн\w* записк",
             r"существующее состояние фасад",
         ],
@@ -215,7 +216,7 @@ FACADE_NAME_RE = re.compile(r"(Фасад\s+[^\s,;]+(?:\s*\([^)]*\))?)")
 
 _STAMP_LABELS = {
     "Адрес объекта": r"адрес объекта",
-    "Автор проекта": r"автор проект\w*(?:\s+решени\w*)?",
+    "Автор проекта": r"автор (?:проект\w*(?:\s+решени\w*)?|колористическ\w* решени\w*)",
 }
 
 
@@ -390,6 +391,9 @@ def _finish_rows(doc: Document, pages: list[int]) -> list[FinishRow]:
                     continue
                 n_c = cell("n")
                 n = n_c.text.strip(" .") if n_c and n_c.text else str(len(rows) + 1)
+                # Строка с номерами колонок — часть шапки, а не элемент фасада.
+                if all(not c.text or re.fullmatch(r"\d+", c.text.strip()) for c in row):
+                    continue
                 bboxes = [c.bbox for c in row if c and c.bbox]
                 row_bbox = (
                     (min(b[0] for b in bboxes), min(b[1] for b in bboxes), max(b[2] for b in bboxes), max(b[3] for b in bboxes))

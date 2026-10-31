@@ -21,6 +21,7 @@ thresholds:
   delta_e_undeclared: 14       # кластер цвета на развёртке не похож ни на один заявленный
   undeclared_min_share: 0.006  # минимальная доля пикселей кластера
   glazing_max_chroma: 10       # «серый» = C*ab ≤ 10
+  glazing_max_frame_scale: 1.5 # рама не шире и не выше стекла более чем в 1,5 раза
   scan_dpi_error: 150
   scan_dpi_warn: 300
   min_facades: 4

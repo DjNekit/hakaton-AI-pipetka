@@ -96,17 +96,26 @@ class Context:
 
 def norm_address(s: str | None) -> str:
     s = (s or "").lower().replace("ё", "е")
+    # Административный округ и район в скобках не меняют адрес здания.
+    s = re.sub(
+        r"\([^)]*\)",
+        lambda m: "" if re.search(r"\b(?:[сзювц]{1,3}ао|район|округ)\b", m[0]) else m[0],
+        s,
+    )
     repl = {
         r"\bгород\b": "г",
         r"\bулица\b": "ул",
         r"\bдом\b": "д",
         r"\bкорпус\b": "корп",
+        r"\bк\b": "корп",
         r"\bстроение\b": "стр",
         r"\bпроезд\b": "пр",
     }
     for a, b in repl.items():
         s = re.sub(a, b, s)
     s = re.sub(r"\bг\.?\s*москва\b|\bмосква\b", "", s)
+    # «улица Герасима Курина» и «Герасима Курина ул.» — один адрес.
+    s = re.sub(r"\bул\b", "", s)
     return re.sub(r"[^0-9a-zа-я]", "", s)
 
 
@@ -280,7 +289,7 @@ def check_glazing(ctx: Context) -> RuleResult:
     found_any = False
     for fs in ctx.p.facades:
         page = ctx.doc.pages[fs.page]
-        groups = glazing_groups(page)
+        groups = glazing_groups(page, max_frame_scale=ctx.th["glazing_max_frame_scale"])
         for g in groups:
             found_any = True
             lab = srgb_to_lab(g.fill_rgb)
@@ -410,8 +419,14 @@ def check_both_palettes(ctx: Context) -> RuleResult:
 
 def check_ral_codes(ctx: Context) -> RuleResult:
     res = RuleResult("TAB-02", "ok")
+    if not ctx.p.finish_rows or not any(r.marks.ral for r in ctx.p.finish_rows):
+        return RuleResult("TAB-02", "skip", note="Недостаточно данных: таблица или марки RAL не распознаны")
     for r in ctx.p.finish_rows:
         for code in r.marks.ral:
+            if " " in code:
+                res.status = "skip"
+                res.note = "Коды RAL Design извлечены, но их проверка не поддерживается справочником RAL Classic"
+                continue
             if not ral_lookup(code):
                 res.findings.append(
                     ctx.f("TAB-02", f"Поз. {r.n} «{r.name}»: код RAL {code} отсутствует в палитре RAL Classic", page=r.page, bbox=r.marks_bbox, element=r.n, actual=f"RAL {code}")
@@ -421,6 +436,8 @@ def check_ral_codes(ctx: Context) -> RuleResult:
 
 def check_ncs_codes(ctx: Context) -> RuleResult:
     res = RuleResult("TAB-03", "ok")
+    if not ctx.p.finish_rows or not any(r.marks.ncs for r in ctx.p.finish_rows):
+        return RuleResult("TAB-03", "skip", note="Недостаточно данных: таблица или марки NCS не распознаны")
     for r in ctx.p.finish_rows:
         for n in r.marks.ncs:
             if not n.valid:
@@ -439,6 +456,12 @@ def check_ncs_codes(ctx: Context) -> RuleResult:
 
 def check_pairs(ctx: Context) -> RuleResult:
     res = RuleResult("TAB-04", "ok")
+    if not any(any(ral_lookup(c) for c in r.marks.ral) and any(n.valid for n in r.marks.ncs)
+               for r in ctx.p.finish_rows):
+        return RuleResult("TAB-04", "skip", note="Нет распознанных пар RAL Classic и NCS для сравнения")
+    if any(" " in c for r in ctx.p.finish_rows for c in r.marks.ral):
+        res.status = "skip"
+        res.note = "Проверены только пары RAL Classic и NCS; сравнение с RAL Design не поддерживается"
     for r in ctx.p.finish_rows:
         rals = [ral_lookup(c) for c in r.marks.ral if ral_lookup(c)]
         ncs = [n for n in r.marks.ncs if n.valid]
@@ -544,6 +567,8 @@ def check_swatches(ctx: Context) -> RuleResult:
 
 def check_materials(ctx: Context) -> RuleResult:
     res = RuleResult("TAB-06", "ok")
+    if not ctx.p.finish_rows:
+        return RuleResult("TAB-06", "skip", note="Недостаточно данных: таблица отделки не распознана")
     for r in ctx.p.finish_rows:
         if _template_row(r):
             continue
@@ -630,6 +655,9 @@ _NOTE_TEMPLATE = re.compile(
 def _note_sections(text: str) -> tuple[str | None, str | None]:
     """Делит раздел III на п. 1 (характеристика) и п. 2 (существующее состояние). None — пункт не найден."""
     t = norm_text(text)
+    # Формы с нумерацией внутри раздела III: 3.1, 3.2, 3.2.1…
+    t = re.sub(r"(?<![\d.])3\.([12])(?=\.)", r"\1", t)
+    t = re.sub(r"(?<![\d.])3\.([12])(?=\s)", r"\1.", t)
     m1 = re.search(r"(?<![\d.])1\.\s*текстовая часть", t, re.I)
     m2 = re.search(r"(?<![\d.])2\.\s*существующее состояние", t, re.I)
     part1 = part2 = None
@@ -892,7 +920,7 @@ def run_checks(ctx: Context) -> list[RuleResult]:
         r = RuleResult("DRW-02", "skip", note=f"Ошибка выполнения проверки: {exc}")
     results.insert([x.rule for x in results].index("DRW-03"), r)
     for r in results:
-        if r.status != "skip":
+        if r.status != "skip" or r.findings:
             sev = {f.severity for f in r.findings}
             r.status = "fail" if "error" in sev else ("warn" if "warning" in sev else "ok")
         for f in r.findings:

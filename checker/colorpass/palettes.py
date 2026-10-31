@@ -64,7 +64,7 @@ NCS_RE = re.compile(
 )
 # Запись без префикса S допустима только после явного «NCS»
 NCS_NOS_RE = re.compile(r"NCS\s+(?P<s>\d{2})(?P<c>\d{2})\s?[-–]\s?(?P<hue>N|[YRBG](?:\d{2}[YRBG])?)(?![A-Za-z0-9])")
-RAL_RE = re.compile(r"(?:RAL|РАЛ)\s?[-–]?\s?(?P<code>\d{4})(?!\d)", re.IGNORECASE)
+RAL_RE = re.compile(r"(?:RAL|РАЛ)\s*[-–]?\s*(?P<code>\d{3}\s+\d{2}\s+\d{2}|\d{4})(?!\d)", re.IGNORECASE)
 
 
 @dataclass
@@ -180,8 +180,9 @@ def parse_color_spec(text: str) -> ColorSpec:
     text = text or ""
     spec = ColorSpec(raw=text.strip())
     for m in RAL_RE.finditer(text):
-        if m.group("code") not in spec.ral:
-            spec.ral.append(m.group("code"))
+        code = " ".join(m.group("code").split())
+        if code not in spec.ral:
+            spec.ral.append(code)
     seen = set()
     for rx in (NCS_RE, NCS_NOS_RE):
         for m in rx.finditer(text):

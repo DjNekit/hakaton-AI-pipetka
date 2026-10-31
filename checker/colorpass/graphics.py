@@ -200,7 +200,7 @@ class GlazingGroup:
     boxes: list[BBox]
 
 
-def glazing_groups(page: PageData) -> list[GlazingGroup]:
+def glazing_groups(page: PageData, *, max_frame_scale: float) -> list[GlazingGroup]:
     """Векторное остекление: повторяющиеся прямоугольники, вложенные в другие повторяющиеся (рамы)."""
     groups: dict[tuple, list] = {}
     for r in page.rects:
@@ -218,9 +218,13 @@ def glazing_groups(page: PageData) -> list[GlazingGroup]:
         inside = 0
         for r in rects:
             for k2, others in rep.items():
-                if k2 == key or k2[0] <= key[0]:
+                if (k2 == key or k2[0] <= key[0] or k2[1] <= key[1]
+                        or k2[0] > key[0] * max_frame_scale
+                        or k2[1] > key[1] * max_frame_scale):
                     continue
-                if any(o.bbox[0] <= r.bbox[0] and o.bbox[1] <= r.bbox[1] and o.bbox[2] >= r.bbox[2] and o.bbox[3] >= r.bbox[3] for o in others):
+                # Рама окружает стекло со всех сторон. Панель стены внутри
+                # большого прямоугольника здания не является окном.
+                if any(o.bbox[0] < r.bbox[0] and o.bbox[1] < r.bbox[1] and o.bbox[2] > r.bbox[2] and o.bbox[3] > r.bbox[3] for o in others):
                     inside += 1
                     break
         if inside >= 0.8 * len(rects):
