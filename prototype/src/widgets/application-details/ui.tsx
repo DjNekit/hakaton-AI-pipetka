@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import {
   ApplicationNumber,
   applicationQueryOptions,
   ApplicationProperties,
+  ApplicationSheetViewer,
   ApproverConclusion,
   checklistQueryOptions,
   DecisionCard,
@@ -180,9 +181,9 @@ export function ApplicationHeading({
   return (
     <div className="flex flex-col gap-1">
       <ApplicationNumber number={application.number} />
-      <h1 className="text-xl font-semibold">{application.address}</h1>
+      <h1 className="truncate text-lg font-semibold">{application.address}</h1>
       {application.description && (
-        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+        <p className="line-clamp-1 text-sm text-muted-foreground">
           {application.description}
         </p>
       )}
@@ -201,6 +202,7 @@ export function ApplicationReview({
 }) {
   const { t } = useTranslation()
   const { data, isPending, isError } = useQuery(applicationQueryOptions(id))
+  const [tab, setTab] = useState<'work' | 'properties' | 'history'>('work')
 
   if (isPending) return <Skeleton className="h-64" />
   if (isError) {
@@ -221,27 +223,25 @@ export function ApplicationReview({
     </Section>
   )
 
-  if (layout === 'panel') {
-    return (
-      <div className="flex flex-col gap-8">
-        {properties}
-        {work}
-        {decision}
-        {history}
-      </div>
-    )
-  }
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
-      <div className="flex min-w-0 flex-col gap-6">
-        <ApplicationHeading application={data} />
-        {work}
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      {layout === 'page' && <div className="shrink-0"><ApplicationHeading application={data} /></div>}
+      <div className={layout === 'panel'
+        ? 'grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3'
+        : 'grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 md:grid-cols-[minmax(0,1fr)_24rem] md:grid-rows-1'}>
+        <ApplicationSheetViewer key={data.id} application={data} />
+        <aside className="flex min-h-0 min-w-0 flex-col gap-3 rounded-xl border p-3">
+          <nav className="flex shrink-0 gap-1 border-b pb-2" aria-label="Разделы проверки">
+            {([['work', 'Проверка'], ['properties', 'Заявка'], ['history', 'Версии']] as const).map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)}
+                className={`rounded-md px-3 py-1.5 text-sm ${tab === value ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>{label}</button>
+            ))}
+          </nav>
+          <div className={tab === 'work' ? 'flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto' : 'hidden'}>{work}{decision}</div>
+          {tab === 'properties' && <div className="min-h-0 flex-1 overflow-y-auto">{properties}</div>}
+          {tab === 'history' && <div className="min-h-0 flex-1 overflow-y-auto">{history}</div>}
+        </aside>
       </div>
-      <aside className="flex flex-col gap-6 lg:border-l lg:pl-8">
-        {properties}
-        {decision}
-        {history}
-      </aside>
     </div>
   )
 }

@@ -137,6 +137,9 @@ function parse<T>(value: string | null) {
 
 function toVersion(row: VersionRow): ApplicationVersion {
   return {
+    files: connection().prepare<[string], { name: string; index: number }>(
+      'select name, position as "index" from application_version_file where versionId = ? order by position',
+    ).all(row.id),
     id: row.id,
     version: row.version,
     fileName: row.fileName,
@@ -328,9 +331,14 @@ export function setVersionSummary(versionId: string, summary: VersionSummary) {
   if (version) notifyChange(version.applicationId)
 }
 
-export function readVersionFile(applicationId: string, versionId: string) {
+export function readVersionFile(applicationId: string, versionId: string, index = 0) {
   const row = findVersion(applicationId, versionId)
-  return row ? { name: row.fileName, data: readFileSync(row.filePath) } : undefined
+  if (!row) return undefined
+  const file = connection().prepare<[string, number], { name: string; path: string }>(
+    'select name, path from application_version_file where versionId = ? and position = ?',
+  ).get(versionId, index)
+  if (file) return { name: file.name, data: readFileSync(file.path) }
+  return index === 0 ? { name: row.fileName, data: readFileSync(row.filePath) } : undefined
 }
 
 export function submitDraft(id: string, versionId: string, input: DraftFields) {

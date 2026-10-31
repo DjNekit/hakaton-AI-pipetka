@@ -18,6 +18,7 @@
 import { serve } from '@hono/node-server'
 import { getMigrations } from 'better-auth/db/migration'
 import { Hono } from 'hono'
+import { readSheets, readSheetImage } from './sheets'
 import { streamSSE } from 'hono/streaming'
 import { subscribeApplications } from './events'
 
@@ -192,12 +193,12 @@ app.get('/applications/:id/versions/:vid/check', async c => {
   if (!version.packageId) return jsonError(404, 'not_checked')
   try {
     const status = await readCheck(version.packageId)
-    if (status.result && !version.summary) {
-      setVersionSummary(version.id, {
+    if (status.result) {
+      const summary = {
         errors: status.result.findings.filter(f => f.severity === 'error').length,
-        warnings: status.result.findings.filter(f => f.severity === 'warning')
-          .length,
-      })
+        warnings: status.result.findings.filter(f => f.severity === 'warning').length,
+      }
+      if (version.summary !== JSON.stringify(summary)) setVersionSummary(version.id, summary)
     }
     return c.json(status)
   } catch (error) {
@@ -219,6 +220,41 @@ app.post('/applications/:id/versions/:vid/advice', async c => {
   }
 })
 
+async function sheetsResponse(request: Request, id: string, versionId?: string) {
+  const user = await getCurrentUser(request)
+  if (!user) return jsonError(401, 'unauthorized')
+  const application = getApplication(id)
+  if (!application || !canAccess(user, application)) return jsonError(404, 'not_found')
+  const version = versionId ? findVersion(id, versionId) : undefined
+  if (versionId && !version) return jsonError(404, 'not_found')
+  const packageId = versionId
+    ? version?.packageId
+    : application.aiReview?.packageId ?? (application.submittedVersionId
+      ? findVersion(id, application.submittedVersionId)?.packageId : undefined)
+  if (!packageId) return Response.json({ state: 'pending', documents: [] })
+  const url = new URL(request.url)
+  try {
+    if (url.searchParams.has('page')) {
+      const file = Number(url.searchParams.get('file') ?? 0)
+      const page = Number(url.searchParams.get('page'))
+      if (!Number.isInteger(file) || file < 0 || !Number.isInteger(page) || page < 0) return jsonError(400, 'invalid_fields')
+      const image = await readSheetImage(packageId, file, page)
+      if (!image) return jsonError(404, 'not_found')
+      return new Response(image.body, { headers: {
+        'Content-Type': image.headers.get('content-type') ?? 'image/png',
+        'Cache-Control': 'private, max-age=300',
+        'X-Content-Type-Options': 'nosniff',
+      } })
+    }
+    return Response.json(await readSheets(packageId, user.role !== 'approver'))
+  } catch {
+    return jsonError(503, 'checker_unavailable')
+  }
+}
+
+app.get('/applications/:id/sheets', c => sheetsResponse(c.req.raw, c.req.param('id')))
+app.get('/applications/:id/versions/:vid/sheets', c => sheetsResponse(c.req.raw, c.req.param('id'), c.req.param('vid')))
+
 app.get('/applications/:id/versions/:vid/file', async c => {
   const user = await getCurrentUser(c.req.raw)
   if (!user) return jsonError(401, 'unauthorized')
@@ -226,7 +262,9 @@ app.get('/applications/:id/versions/:vid/file', async c => {
   if (!application || !canAccess(user, application)) {
     return jsonError(404, 'not_found')
   }
-  const file = readVersionFile(application.id, c.req.param('vid'))
+  const index = Number(c.req.query('index') ?? 0)
+  if (!Number.isInteger(index) || index < 0) return jsonError(400, 'invalid_fields')
+  const file = readVersionFile(application.id, c.req.param('vid'), index)
   if (!file) return jsonError(404, 'not_found')
   return new Response(new Uint8Array(file.data), {
     headers: {

@@ -2,9 +2,8 @@ import { IconFileSearch, IconSend, IconUpload } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  ApplicationSheetViewer,
   formatApplicationNumber,
-  formatDateTime,
-  VersionSummaryLabel,
   type Application,
 } from '@/entities/application'
 import {
@@ -82,6 +81,7 @@ export function DraftEditor({
   useEffect(() => {
     setSelectedId(latestId)
   }, [latestId])
+  const [panel, setPanel] = useState<'fields' | 'check'>(application ? 'check' : 'fields')
   const fileZone = useRef<HTMLDivElement>(null)
   const checkVersion = useCheckVersion(application?.id)
   const submitDraft = useSubmitDraft(application?.id ?? '')
@@ -101,109 +101,63 @@ export function DraftEditor({
       .mutateAsync({ values, files: values.files })
       .catch(() => undefined)
     if (!updated) return
+    setPanel('check')
     form.setFieldValue('files', [])
     if (!application) onCreated(updated)
   }
 
   const uploadNew = () => {
-    fileZone.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    fileZone.current
-      ?.querySelector<HTMLInputElement>('input[type=file]')
-      ?.click()
+    setPanel('fields')
+    requestAnimationFrame(() => fileZone.current?.querySelector<HTMLInputElement>('input[type=file]')?.click())
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
-      <form.AppForm>
-        <form.Root className="flex flex-col gap-5">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-lg font-semibold">
-              {application
-                ? t('applicant.draft.title', {
-                    number: formatApplicationNumber(application.number),
-                  })
-                : t('applicant.submit.title')}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t('applicant.draft.description')}
-            </p>
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] md:grid-rows-1">
+      <section className="flex min-h-0 min-w-0 flex-col gap-3 rounded-xl border p-3">
+        <h1 className="shrink-0 truncate text-base font-semibold">
+          {application ? t('applicant.draft.title', { number: formatApplicationNumber(application.number) }) : t('applicant.submit.title')}
+        </h1>
+        <nav className="flex shrink-0 gap-2" aria-label="Работа с заявкой">
+          <Button type="button" size="sm" variant={panel === 'fields' ? 'default' : 'outline'} onClick={() => setPanel('fields')}>Данные и файлы</Button>
+          <Button type="button" size="sm" variant={panel === 'check' ? 'default' : 'outline'} onClick={() => setPanel('check')}>Проверка</Button>
+        </nav>
+        <div className={panel === 'fields' ? 'min-h-0 flex-1 overflow-y-auto' : 'hidden'}>
+          <form.AppForm>
+            <form.Root className="flex flex-col gap-4">
+              <div ref={fileZone} className="flex flex-col gap-4">
+                <DraftFields form={form} fileKey={String(versions.length)} />
+              </div>
+              <form.Subscribe selector={state => state.values.files}>
+                {files => (
+                  <Button type="button" className="self-start" disabled={!files.length || checkVersion.isPending}
+                    aria-busy={checkVersion.isPending} onClick={() => void runCheck()}>
+                    <SpinnerAddon enabled={checkVersion.isPending} /><IconFileSearch />
+                    {versions.length ? t('applicant.draft.checkNew') : t('applicant.draft.check')}
+                  </Button>
+                )}
+              </form.Subscribe>
+            </form.Root>
+          </form.AppForm>
+        </div>
+        <div className={panel === 'check' ? 'flex min-h-0 flex-1 flex-col gap-3' : 'hidden'}>
+          {versions.length > 0 && <select aria-label="Версия документов" value={selectedId ?? ''}
+            className="w-full shrink-0 rounded-lg border bg-background p-2 text-sm"
+            onChange={event => setSelectedId(event.target.value)}>
+            {versions.map(version => <option key={version.id} value={version.id}>Версия {version.version} · {version.fileName}</option>)}
+          </select>}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {application && selectedId ? <VersionCheckResult key={selectedId} applicationId={application.id} versionId={selectedId} />
+              : <p className="text-sm text-muted-foreground">{t('applicant.draft.empty')}</p>}
           </div>
-          <div ref={fileZone} className="flex flex-col gap-5">
-            <DraftFields form={form} fileKey={String(versions.length)} />
-          </div>
-          <form.Subscribe selector={state => state.values.files}>
-            {file => (
-              <Button
-                type="button"
-                className="self-start"
-                disabled={!file.length || checkVersion.isPending}
-                aria-busy={checkVersion.isPending}
-                onClick={() => void runCheck()}
-              >
-                <SpinnerAddon enabled={checkVersion.isPending} />
-                <IconFileSearch />
-                {versions.length
-                  ? t('applicant.draft.checkNew')
-                  : t('applicant.draft.check')}
-              </Button>
-            )}
-          </form.Subscribe>
-        </form.Root>
-      </form.AppForm>
-      <section className="flex min-w-0 flex-col gap-4 lg:border-l lg:pl-8">
-        <h2 className="text-sm font-medium">{t('applicant.precheck.title')}</h2>
-        {!application && (
-          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            {t('applicant.draft.empty')}
-          </p>
-        )}
-        {application && (
-          <>
-            <ul className="divide-y rounded-lg border">
-              {versions.map(version => (
-                <li key={version.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(version.id)}
-                    className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50 ${selectedId === version.id ? 'bg-muted' : ''}`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {t('application.versions.version', {
-                          version: version.version,
-                        })}
-                      </span>
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {version.fileName}
-                      </span>
-                    </span>
-                    <span className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-                      <span>{formatDateTime(version.createdAt)}</span>
-                      <VersionSummaryLabel version={version} />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {selectedId && (
-              <>
-                <VersionCheckResult
-                  key={selectedId}
-                  applicationId={application.id}
-                  versionId={selectedId}
-                />
-                <VersionActions
-                  application={application}
-                  versionId={selectedId}
-                  submitting={submitDraft.isPending}
-                  onSubmit={() => void form.handleSubmit()}
-                  onUploadNew={uploadNew}
-                />
-              </>
-            )}
-          </>
-        )}
+          {application && selectedId && <div className="shrink-0 border-t pt-3">
+            <VersionActions application={application} versionId={selectedId} submitting={submitDraft.isPending}
+              onSubmit={() => void form.handleSubmit()} onUploadNew={uploadNew} />
+          </div>}
+        </div>
       </section>
+      {application && selectedId ? <ApplicationSheetViewer key={selectedId} application={application}
+        version={versions.find(version => version.id === selectedId)} />
+        : <div className="grid min-h-0 place-content-center rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Загрузите документы и запустите проверку, чтобы увидеть листы</div>}
     </div>
   )
 }

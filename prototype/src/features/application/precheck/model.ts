@@ -53,7 +53,7 @@ export function versionCheckQueryOptions(
       query.state.data?.result || query.state.data?.state === 'error'
         ? false
         : POLL_INTERVAL,
-    staleTime: query => (query.state.data?.result ? Infinity : 0),
+    staleTime: 30000,
   })
 }
 
@@ -97,6 +97,8 @@ export function checkOutcome(check: VersionCheck | undefined) {
   const errors = check.result.findings.filter(
     f => f.severity === 'error',
   ).length
+  if (check.result.verdict === 'fail') return 'errors' as const
+  if (check.result.verdict === 'warn' && !check.result.findings.length) return 'warnings' as const
   return check.result.findings.length === 0
     ? ('clean' as const)
     : errors

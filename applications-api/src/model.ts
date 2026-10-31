@@ -77,6 +77,7 @@ export interface VersionSummary {
 }
 
 export interface ApplicationVersion {
+  files?: Array<{ name: string; index: number }>
   id: string
   version: number
   fileName: string

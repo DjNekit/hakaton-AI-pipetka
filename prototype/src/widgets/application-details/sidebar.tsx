@@ -66,12 +66,12 @@ function PanelContent({
           <IconX />
         </Button>
       </SidebarHeader>
-      <SidebarContent className="gap-6 px-4 py-5">
+      <SidebarContent className="min-h-0 gap-3 overflow-hidden px-3 py-3">
         {data && (
-          <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold">{data.address}</h2>
+          <div className="flex shrink-0 flex-col gap-1">
+            <h2 className="truncate text-lg font-semibold">{data.address}</h2>
             {data.description && (
-              <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+              <p className="line-clamp-1 text-sm text-muted-foreground">
                 {data.description}
               </p>
             )}

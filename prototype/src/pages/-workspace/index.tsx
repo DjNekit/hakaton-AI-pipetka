@@ -117,7 +117,7 @@ export function StaffApplicationPage({
 }) {
   const { t } = useTranslation()
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <main className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4">
       <Link
         to={role === 'normcontrol' ? '/normcontrol' : '/approver'}
         className="inline-flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"

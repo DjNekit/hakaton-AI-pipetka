@@ -32,7 +32,7 @@ function ApplicationPage() {
 
   if (data?.status === 'draft') {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden p-3 sm:p-4">
         <DraftEditor
           application={data}
           onCreated={() => undefined}

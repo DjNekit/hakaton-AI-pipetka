@@ -65,6 +65,15 @@ interface CheckFinding {
   actual?: string | null
 }
 
+interface PackageCheck {
+  rule: string
+  title: string
+  ref?: string
+  status: string
+  note?: string
+  evidence?: Array<{ file?: string; page?: number; quote?: string; note?: string }>
+}
+
 interface CheckRun {
   report?: {
     document_kind?: string
@@ -97,7 +106,7 @@ export interface CheckStatus {
 }
 
 export async function readCheck(packageId: string): Promise<CheckStatus> {
-  const pkg = await upstream<{ state: string; documents: PackageDocument[] }>(
+  const pkg = await upstream<{ state: string; documents: PackageDocument[]; checks?: PackageCheck[]; verdict?: string }>(
     `${BACKEND_URL}/api/packages/${packageId}`,
   )
   const document = pkg.documents.find(doc => doc.state !== 'done') ?? pkg.documents[0]
@@ -106,31 +115,48 @@ export async function readCheck(packageId: string): Promise<CheckStatus> {
     stage: document?.stage ?? '',
     progress: document?.progress ?? 0,
   }
-  if (!document || pkg.documents.some(doc => doc.state !== 'done')) return { ...base, result: null }
+  if (pkg.documents.some(doc => doc.state === 'error') || pkg.state === 'error') {
+    return { ...base, state: 'error', result: null }
+  }
+  // Документы завершаются раньше сводной проверки: ждём результат всего пакета.
+  if (pkg.state !== 'done' || !document || pkg.documents.some(doc => doc.state !== 'done')) return { ...base, result: null }
+  if (!pkg.checks?.length) throw new UpstreamError(502, 'checker_result_missing')
   const runs = await Promise.all(pkg.documents.map(doc => upstream<CheckRun>(
     `${BACKEND_URL}/api/checks/${doc.id}`,
   )))
   const run = runs[0]
+  if (runs.some(run => !run.report)) throw new UpstreamError(502, 'checker_result_missing')
   const findings = runs.flatMap(run => run.report?.findings ?? [])
+  const documentFindings = findings
+    .filter(f => f.severity === 'error' || f.severity === 'warning')
+    .map(f => ({
+      rule: f.rule, title: f.title ?? f.rule, ref: f.ref ?? '',
+      severity: f.severity as 'error' | 'warning', message: f.message,
+      page: typeof f.page === 'number' ? f.page + 1 : null,
+      expected: f.expected ?? null, actual: f.actual ?? null,
+    }))
+  const packageFindings = pkg.checks
+    .filter(check => check.status === 'fail' || check.status === 'warn')
+    .map(check => ({
+      rule: check.rule, title: check.title, ref: check.ref ?? '',
+      severity: (check.status === 'fail' ? 'error' : 'warning') as 'error' | 'warning',
+      message: [check.title, check.note, ...(check.evidence ?? []).map(e =>
+        [e.file, e.page ? `стр. ${e.page}` : '', e.quote ?? e.note].filter(Boolean).join(': '),
+      )].filter(Boolean).join(' — '),
+      // У пункта пакета могут быть доказательства из нескольких PDF и страниц.
+      page: null, expected: null, actual: null,
+    }))
+  const allFindings = [...documentFindings, ...packageFindings]
+  const verdict = allFindings.some(f => f.severity === 'error') || pkg.verdict === 'fail'
+    ? 'fail' : allFindings.length || pkg.verdict === 'warn' ? 'warn' : 'pass'
   return {
     ...base,
     result: {
       checkId: document.id,
       documentKind:
         run.report?.document_kind === 'signage' ? 'signage' : 'passport',
-      verdict: runs.some(run => run.report?.verdict === 'fail') ? 'fail' : run.report?.verdict ?? 'pass',
-      findings: findings
-        .filter(f => f.severity === 'error' || f.severity === 'warning')
-        .map(f => ({
-          rule: f.rule,
-          title: f.title ?? f.rule,
-          ref: f.ref ?? '',
-          severity: f.severity as 'error' | 'warning',
-          message: f.message,
-          page: f.page === null ? null : f.page + 1,
-          expected: f.expected ?? null,
-          actual: f.actual ?? null,
-        })),
+      verdict,
+      findings: allFindings,
     },
   }
 }

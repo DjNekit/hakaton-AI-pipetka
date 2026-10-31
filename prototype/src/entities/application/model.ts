@@ -83,6 +83,7 @@ export interface VersionSummary {
 }
 
 export interface ApplicationVersion {
+  files?: Array<{ name: string; index: number }>
   id: string
   version: number
   fileName: string
@@ -133,8 +134,8 @@ export function applicationFileUrl(id: string, index = 0) {
   return apiUrl(`/applications/${id}/file?index=${index}`)
 }
 
-export function versionFileUrl(applicationId: string, versionId: string) {
-  return apiUrl(`/applications/${applicationId}/versions/${versionId}/file`)
+export function versionFileUrl(applicationId: string, versionId: string, index = 0) {
+  return apiUrl(`/applications/${applicationId}/versions/${versionId}/file?index=${index}`)
 }
 
 export const applicationKeys = {
