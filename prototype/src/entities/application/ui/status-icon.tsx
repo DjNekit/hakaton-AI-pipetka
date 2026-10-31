@@ -1,9 +1,8 @@
 import type { ApplicationStatus } from '../model'
 
 const COLORS: Record<ApplicationStatus, string> = {
-  ai_check: 'text-violet-500',
-  in_review: 'text-amber-500',
-  rework: 'text-orange-500',
+  review: 'text-amber-500',
+  normcontrol: 'text-indigo-500',
   approved: 'text-emerald-500',
   rejected: 'text-muted-foreground',
 }
@@ -22,23 +21,7 @@ export function StatusIcon({
       aria-hidden="true"
       className={`${COLORS[status]} shrink-0 ${className}`}
     >
-      {status === 'ai_check' && (
-        <>
-          <circle
-            cx="7"
-            cy="7"
-            r="5.5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeDasharray="1.6 1.6"
-          />
-          <path
-            d="M7 4.2l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"
-            fill="currentColor"
-          />
-        </>
-      )}
-      {status === 'in_review' && (
+      {status === 'review' && (
         <>
           <circle
             cx="7"
@@ -50,7 +33,7 @@ export function StatusIcon({
           <path d="M7 3.5a3.5 3.5 0 0 1 0 7z" fill="currentColor" />
         </>
       )}
-      {status === 'rework' && (
+      {status === 'normcontrol' && (
         <>
           <circle
             cx="7"
@@ -58,10 +41,8 @@ export function StatusIcon({
             r="5.5"
             stroke="currentColor"
             strokeWidth="1.5"
-            strokeDasharray="2.4 1.6"
           />
-          <path d="M7 3.5v4" stroke="currentColor" strokeWidth="1.5" />
-          <circle cx="7" cy="9.75" r="0.85" fill="currentColor" />
+          <path d="M7 3.5a3.5 3.5 0 1 1-3.5 3.5H7z" fill="currentColor" />
         </>
       )}
       {status === 'approved' && (

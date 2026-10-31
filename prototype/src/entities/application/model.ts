@@ -4,43 +4,28 @@ import { apiUrl, requestJson } from '@/shared/api'
 import { z } from '@/shared/i18n'
 
 export const APPLICATION_STATUSES = [
-  'ai_check',
-  'in_review',
-  'rework',
+  'review',
+  'normcontrol',
   'approved',
   'rejected',
 ] as const
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
-export const applicationStatusSchema = z.enum(APPLICATION_STATUSES)
 
-export const REVIEW_STATUSES = [
-  'in_review',
-  'rework',
-  'approved',
-  'rejected',
-] as const satisfies readonly ApplicationStatus[]
-export type ReviewStatus = (typeof REVIEW_STATUSES)[number]
-
-export function isReviewStatus(
-  status: ApplicationStatus,
-): status is ReviewStatus {
-  return (REVIEW_STATUSES as readonly ApplicationStatus[]).includes(status)
-}
-
-export const AI_VERDICTS = [
+export const VERDICTS = [
   'violation',
   'ok',
   'not_applicable',
   'unknown',
 ] as const
-export type AiVerdict = (typeof AI_VERDICTS)[number]
+export type Verdict = (typeof VERDICTS)[number]
+export type AiVerdict = Verdict
 
 export interface AiReviewItem {
   id: string
   section: string
   title: string
   basis: string
-  verdict: AiVerdict
+  verdict: Verdict
   result: string
   comment: string
 }
@@ -52,6 +37,47 @@ export interface AiReview {
   error?: string
   model?: string
   finishedAt?: string
+}
+
+export interface ReviewItem {
+  id: string
+  section: string
+  title: string
+  basis: string
+  verdict: Verdict
+  comment: string
+}
+
+export const RECOMMENDATIONS = ['approve', 'reject'] as const
+export type Recommendation = (typeof RECOMMENDATIONS)[number]
+
+export interface ApproverReview {
+  reviewerId: string
+  reviewerName: string
+  items: ReviewItem[]
+  recommendation: Recommendation
+  comment: string
+  submittedAt: string
+}
+
+export const DECISIONS = ['approved', 'rejected'] as const
+export type DecisionValue = (typeof DECISIONS)[number]
+
+export interface Decision {
+  deciderId: string
+  deciderName: string
+  decision: DecisionValue
+  comment: string
+  decidedAt: string
+}
+
+export interface ChecklistItem {
+  id: string
+  section: string
+  title: string
+  check: string
+  basis: string
+  options: string[]
 }
 
 export const DOCUMENT_TYPES = ['passport', 'signage', 'facade'] as const
@@ -69,17 +95,12 @@ export interface Application {
   description: string
   fileName: string
   status: ApplicationStatus
-  reviewComment: string
   aiReview: AiReview | null
+  approverReview: ApproverReview | null
+  decision: Decision | null
   createdAt: string
   updatedAt: string
 }
-
-export const reviewSchema = z.object({
-  status: z.enum(REVIEW_STATUSES),
-  reviewComment: z.string().max(2000),
-})
-export type ReviewData = z.infer<typeof reviewSchema>
 
 export function formatApplicationNumber(number: number) {
   return `ЗК-${number}`
@@ -92,17 +113,18 @@ export function applicationFileUrl(id: string) {
 export const applicationKeys = {
   all: ['applications'] as const,
   detail: (id: string) => ['applications', id] as const,
+  checklist: (id: string) => ['applications', id, 'checklist'] as const,
 }
 
-const AI_POLL_INTERVAL = 3000
+const POLL_INTERVAL = 4000
 
 export function applicationsQueryOptions() {
   return queryOptions({
     queryKey: applicationKeys.all,
     queryFn: () => requestJson<Application[]>(apiUrl('/applications')),
     refetchInterval: query =>
-      query.state.data?.some(item => item.status === 'ai_check')
-        ? AI_POLL_INTERVAL
+      query.state.data?.some(item => item.status === 'review')
+        ? POLL_INTERVAL
         : false,
   })
 }
@@ -112,6 +134,15 @@ export function applicationQueryOptions(id: string) {
     queryKey: applicationKeys.detail(id),
     queryFn: () => requestJson<Application>(apiUrl(`/applications/${id}`)),
     refetchInterval: query =>
-      query.state.data?.status === 'ai_check' ? AI_POLL_INTERVAL : false,
+      query.state.data?.status === 'review' ? POLL_INTERVAL : false,
+  })
+}
+
+export function checklistQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: applicationKeys.checklist(id),
+    queryFn: () =>
+      requestJson<ChecklistItem[]>(apiUrl(`/applications/${id}/checklist`)),
+    staleTime: Infinity,
   })
 }

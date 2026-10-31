@@ -1,4 +1,6 @@
 export * from './ai-review'
+export * from './decision'
 export * from './details'
 export * from './labels'
+export * from './review-comparison'
 export * from './status-icon'

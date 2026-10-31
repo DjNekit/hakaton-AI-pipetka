@@ -1,6 +1,7 @@
 import { createFormHook } from '@tanstack/react-form'
 
 import {
+  AppChoice,
   AppFieldError,
   AppFieldLabel,
   AppFieldRoot,
@@ -22,6 +23,7 @@ const fieldComponents = {
   Textarea: AppTextarea,
   Select: AppSelect,
   File: AppFileInput,
+  Choice: AppChoice,
 }
 
 const formComponents = {

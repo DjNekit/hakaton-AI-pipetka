@@ -4,11 +4,22 @@ import { emailOTP } from 'better-auth/plugins'
 import { createDb } from './auth-db'
 import { deliver } from './mailbox'
 
-function approverEmails() {
-  return (process.env.APPROVER_EMAILS ?? '')
+function emailList(value: string | undefined) {
+  return (value ?? '')
     .split(',')
     .map(email => email.trim().toLowerCase())
     .filter(Boolean)
+}
+
+function roleForEmail(email: string) {
+  const normalized = email.toLowerCase()
+  if (emailList(process.env.NORMCONTROL_EMAILS).includes(normalized)) {
+    return 'normcontrol'
+  }
+  if (emailList(process.env.APPROVER_EMAILS).includes(normalized)) {
+    return 'approver'
+  }
+  return 'applicant'
 }
 
 function baseURL() {
@@ -47,9 +58,7 @@ export const auth = betterAuth({
         before: async user => ({
           data: {
             ...user,
-            role: approverEmails().includes(user.email.toLowerCase())
-              ? 'approver'
-              : 'applicant',
+            role: roleForEmail(user.email),
           },
         }),
       },

@@ -18,6 +18,7 @@ import { Route as AuthVerifyEmailRouteImport } from './../../pages/_auth/verify-
 import { Route as AuthenticatedIndexRouteImport } from './../../pages/_authenticated/index'
 import { Route as AuthenticatedApplicantRouteRouteImport } from './../../pages/_authenticated/applicant/route'
 import { Route as AuthenticatedApproverRouteRouteImport } from './../../pages/_authenticated/approver/route'
+import { Route as AuthenticatedNormcontrolRouteRouteImport } from './../../pages/_authenticated/normcontrol/route'
 import { Route as AuthSignInIndexRouteImport } from './../../pages/_auth/sign-in/index'
 import { Route as AuthSignInCodeRouteImport } from './../../pages/_auth/sign-in/code'
 import { Route as AuthSignInPasswordRouteImport } from './../../pages/_auth/sign-in/password'
@@ -27,6 +28,8 @@ import { Route as AuthenticatedApplicantAssistantRouteImport } from './../../pag
 import { Route as AuthenticatedApplicantNewRouteImport } from './../../pages/_authenticated/applicant/new'
 import { Route as AuthenticatedApproverIndexRouteImport } from './../../pages/_authenticated/approver/index'
 import { Route as AuthenticatedApproverIdRouteImport } from './../../pages/_authenticated/approver/$id'
+import { Route as AuthenticatedNormcontrolIndexRouteImport } from './../../pages/_authenticated/normcontrol/index'
+import { Route as AuthenticatedNormcontrolIdRouteImport } from './../../pages/_authenticated/normcontrol/$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -71,6 +74,12 @@ const AuthenticatedApproverRouteRoute =
   AuthenticatedApproverRouteRouteImport.update({
     id: '/approver',
     path: '/approver',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedNormcontrolRouteRoute =
+  AuthenticatedNormcontrolRouteRouteImport.update({
+    id: '/normcontrol',
+    path: '/normcontrol',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthSignInIndexRoute = AuthSignInIndexRouteImport.update({
@@ -123,11 +132,24 @@ const AuthenticatedApproverIdRoute = AuthenticatedApproverIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedApproverRouteRoute,
 } as any)
+const AuthenticatedNormcontrolIndexRoute =
+  AuthenticatedNormcontrolIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedNormcontrolRouteRoute,
+  } as any)
+const AuthenticatedNormcontrolIdRoute =
+  AuthenticatedNormcontrolIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedNormcontrolRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/applicant': typeof AuthenticatedApplicantRouteRouteWithChildren
   '/approver': typeof AuthenticatedApproverRouteRouteWithChildren
+  '/normcontrol': typeof AuthenticatedNormcontrolRouteRouteWithChildren
   '/forgot-password': typeof AuthForgotPasswordRoute
   '/reset-password': typeof AuthResetPasswordRoute
   '/sign-up': typeof AuthSignUpRoute
@@ -138,9 +160,11 @@ export interface FileRoutesByFullPath {
   '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
+  '/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
   '/sign-in/': typeof AuthSignInIndexRoute
   '/applicant/': typeof AuthenticatedApplicantIndexRoute
   '/approver/': typeof AuthenticatedApproverIndexRoute
+  '/normcontrol/': typeof AuthenticatedNormcontrolIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
@@ -154,9 +178,11 @@ export interface FileRoutesByTo {
   '/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/approver/$id': typeof AuthenticatedApproverIdRoute
+  '/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
   '/sign-in': typeof AuthSignInIndexRoute
   '/applicant': typeof AuthenticatedApplicantIndexRoute
   '/approver': typeof AuthenticatedApproverIndexRoute
+  '/normcontrol': typeof AuthenticatedNormcontrolIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -164,6 +190,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/_authenticated/applicant': typeof AuthenticatedApplicantRouteRouteWithChildren
   '/_authenticated/approver': typeof AuthenticatedApproverRouteRouteWithChildren
+  '/_authenticated/normcontrol': typeof AuthenticatedNormcontrolRouteRouteWithChildren
   '/_auth/forgot-password': typeof AuthForgotPasswordRoute
   '/_auth/reset-password': typeof AuthResetPasswordRoute
   '/_auth/sign-up': typeof AuthSignUpRoute
@@ -175,9 +202,11 @@ export interface FileRoutesById {
   '/_authenticated/applicant/assistant': typeof AuthenticatedApplicantAssistantRoute
   '/_authenticated/applicant/new': typeof AuthenticatedApplicantNewRoute
   '/_authenticated/approver/$id': typeof AuthenticatedApproverIdRoute
+  '/_authenticated/normcontrol/$id': typeof AuthenticatedNormcontrolIdRoute
   '/_auth/sign-in/': typeof AuthSignInIndexRoute
   '/_authenticated/applicant/': typeof AuthenticatedApplicantIndexRoute
   '/_authenticated/approver/': typeof AuthenticatedApproverIndexRoute
+  '/_authenticated/normcontrol/': typeof AuthenticatedNormcontrolIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -185,6 +214,7 @@ export interface FileRouteTypes {
     | '/'
     | '/applicant'
     | '/approver'
+    | '/normcontrol'
     | '/forgot-password'
     | '/reset-password'
     | '/sign-up'
@@ -195,9 +225,11 @@ export interface FileRouteTypes {
     | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
+    | '/normcontrol/$id'
     | '/sign-in/'
     | '/applicant/'
     | '/approver/'
+    | '/normcontrol/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -211,15 +243,18 @@ export interface FileRouteTypes {
     | '/applicant/assistant'
     | '/applicant/new'
     | '/approver/$id'
+    | '/normcontrol/$id'
     | '/sign-in'
     | '/applicant'
     | '/approver'
+    | '/normcontrol'
   id:
     | '__root__'
     | '/_auth'
     | '/_authenticated'
     | '/_authenticated/applicant'
     | '/_authenticated/approver'
+    | '/_authenticated/normcontrol'
     | '/_auth/forgot-password'
     | '/_auth/reset-password'
     | '/_auth/sign-up'
@@ -231,9 +266,11 @@ export interface FileRouteTypes {
     | '/_authenticated/applicant/assistant'
     | '/_authenticated/applicant/new'
     | '/_authenticated/approver/$id'
+    | '/_authenticated/normcontrol/$id'
     | '/_auth/sign-in/'
     | '/_authenticated/applicant/'
     | '/_authenticated/approver/'
+    | '/_authenticated/normcontrol/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -306,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApproverRouteRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/normcontrol': {
+      id: '/_authenticated/normcontrol'
+      path: '/normcontrol'
+      fullPath: '/normcontrol'
+      preLoaderRoute: typeof AuthenticatedNormcontrolRouteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_auth/sign-in/': {
       id: '/_auth/sign-in/'
       path: '/sign-in'
@@ -369,6 +413,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApproverIdRouteImport
       parentRoute: typeof AuthenticatedApproverRouteRoute
     }
+    '/_authenticated/normcontrol/': {
+      id: '/_authenticated/normcontrol/'
+      path: '/'
+      fullPath: '/normcontrol/'
+      preLoaderRoute: typeof AuthenticatedNormcontrolIndexRouteImport
+      parentRoute: typeof AuthenticatedNormcontrolRouteRoute
+    }
+    '/_authenticated/normcontrol/$id': {
+      id: '/_authenticated/normcontrol/$id'
+      path: '/$id'
+      fullPath: '/normcontrol/$id'
+      preLoaderRoute: typeof AuthenticatedNormcontrolIdRouteImport
+      parentRoute: typeof AuthenticatedNormcontrolRouteRoute
+    }
   }
 }
 
@@ -430,9 +488,26 @@ const AuthenticatedApproverRouteRouteWithChildren =
     AuthenticatedApproverRouteRouteChildren,
   )
 
+interface AuthenticatedNormcontrolRouteRouteChildren {
+  AuthenticatedNormcontrolIdRoute: typeof AuthenticatedNormcontrolIdRoute
+  AuthenticatedNormcontrolIndexRoute: typeof AuthenticatedNormcontrolIndexRoute
+}
+
+const AuthenticatedNormcontrolRouteRouteChildren: AuthenticatedNormcontrolRouteRouteChildren =
+  {
+    AuthenticatedNormcontrolIdRoute: AuthenticatedNormcontrolIdRoute,
+    AuthenticatedNormcontrolIndexRoute: AuthenticatedNormcontrolIndexRoute,
+  }
+
+const AuthenticatedNormcontrolRouteRouteWithChildren =
+  AuthenticatedNormcontrolRouteRoute._addFileChildren(
+    AuthenticatedNormcontrolRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
   AuthenticatedApplicantRouteRoute: typeof AuthenticatedApplicantRouteRouteWithChildren
   AuthenticatedApproverRouteRoute: typeof AuthenticatedApproverRouteRouteWithChildren
+  AuthenticatedNormcontrolRouteRoute: typeof AuthenticatedNormcontrolRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -440,6 +515,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedApplicantRouteRoute:
     AuthenticatedApplicantRouteRouteWithChildren,
   AuthenticatedApproverRouteRoute: AuthenticatedApproverRouteRouteWithChildren,
+  AuthenticatedNormcontrolRouteRoute:
+    AuthenticatedNormcontrolRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 

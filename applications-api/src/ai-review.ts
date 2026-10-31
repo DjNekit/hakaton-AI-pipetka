@@ -129,7 +129,6 @@ export async function runAiReview(id: string) {
         model: 'demo',
         finishedAt: new Date().toISOString(),
       },
-      'in_review',
     )
   } catch (error) {
     setAiReview(
@@ -140,7 +139,6 @@ export async function runAiReview(id: string) {
         error: error instanceof Error ? error.message : String(error),
         finishedAt: new Date().toISOString(),
       },
-      'in_review',
     )
   }
 }

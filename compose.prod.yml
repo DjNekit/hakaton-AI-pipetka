@@ -36,6 +36,7 @@ services:
       BETTER_AUTH_URL: https://${DOMAIN:-ai-pipetka.fun}
       BETTER_AUTH_SECRET: ${PROTOTYPE_AUTH_SECRET:?задайте PROTOTYPE_AUTH_SECRET}
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
+      NORMCONTROL_EMAILS: ${NORMCONTROL_EMAILS:-}
       CHAT_URL: http://chat:3000
     volumes: ["applications-data:/data"]   # SQLite и загруженные PDF
     depends_on:

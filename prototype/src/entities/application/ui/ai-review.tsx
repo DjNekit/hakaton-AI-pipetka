@@ -46,7 +46,7 @@ const VERDICT_STATUS: Partial<Record<AiVerdict, 'error' | 'pending'>> = {
   not_applicable: 'pending',
 }
 
-function VerdictIcon({ verdict }: { verdict: AiVerdict }) {
+export function VerdictIcon({ verdict }: { verdict: AiVerdict }) {
   const Icon = VERDICT_ICONS[verdict]
   return <Icon className={VERDICT_COLORS[verdict]} />
 }

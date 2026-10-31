@@ -16,7 +16,7 @@ import {
   useSidebar,
 } from '@/shared/ui/components/sidebar'
 
-import { ApplicationReview } from './ui'
+import { ApplicationReview, type StaffRole } from './ui'
 
 function useMobileSync(id: string | undefined, onClose: () => void) {
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
@@ -32,7 +32,15 @@ function useMobileSync(id: string | undefined, onClose: () => void) {
   }, [isMobile, openMobile, id, onClose])
 }
 
-function PanelContent({ id, onClose }: { id: string; onClose: () => void }) {
+function PanelContent({
+  id,
+  role,
+  onClose,
+}: {
+  id: string
+  role: StaffRole
+  onClose: () => void
+}) {
   const { t } = useTranslation()
   const { data } = useQuery(applicationQueryOptions(id))
 
@@ -41,7 +49,7 @@ function PanelContent({ id, onClose }: { id: string; onClose: () => void }) {
       <SidebarHeader className="h-12 flex-row items-center gap-3 border-b px-4">
         {data && <ApplicationNumber number={data.number} />}
         <Link
-          to="/approver/$id"
+          to={role === 'normcontrol' ? '/normcontrol/$id' : '/approver/$id'}
           params={{ id }}
           className="inline-flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground hover:text-foreground"
         >
@@ -69,7 +77,7 @@ function PanelContent({ id, onClose }: { id: string; onClose: () => void }) {
             )}
           </div>
         )}
-        <ApplicationReview id={id} layout="panel" />
+        <ApplicationReview id={id} role={role} layout="panel" />
       </SidebarContent>
     </>
   )
@@ -77,9 +85,11 @@ function PanelContent({ id, onClose }: { id: string; onClose: () => void }) {
 
 export function ApplicationSidebar({
   id,
+  role,
   onClose,
 }: {
   id: string | undefined
+  role: StaffRole
   onClose: () => void
 }) {
   useMobileSync(id, onClose)
@@ -99,7 +109,7 @@ export function ApplicationSidebar({
       collapsible="offcanvas"
       className="md:top-14 md:h-[calc(100svh-3.5rem)]"
     >
-      {id && <PanelContent id={id} onClose={onClose} />}
+      {id && <PanelContent id={id} role={role} onClose={onClose} />}
     </Sidebar>
   )
 }

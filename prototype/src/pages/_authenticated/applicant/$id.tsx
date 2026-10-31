@@ -6,6 +6,7 @@ import {
   ApplicationNumber,
   applicationQueryOptions,
   ApplicationProperties,
+  DecisionCard,
 } from '@/entities/application'
 import { useTranslation } from '@/shared/i18n'
 import { Skeleton } from '@/shared/ui/components/skeleton'
@@ -44,13 +45,11 @@ function ApplicationPage() {
             )}
           </div>
           <ApplicationProperties application={data} />
-          <section className="flex flex-col gap-2 rounded-lg border p-4">
+          <section className="flex flex-col gap-2">
             <h2 className="text-sm font-medium">
-              {t('application.fields.reviewComment')}
+              {t('application.decision.title')}
             </h2>
-            <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-              {data.reviewComment || t('application.noReviewComment')}
-            </p>
+            <DecisionCard decision={data.decision} />
           </section>
         </>
       )}

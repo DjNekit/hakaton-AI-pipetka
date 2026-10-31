@@ -10,7 +10,10 @@ import {
 } from '@/entities/application'
 import { useTranslation } from '@/shared/i18n'
 
-export type ApplicationDetailRoute = '/approver/$id' | '/applicant/$id'
+export type ApplicationDetailRoute =
+  | '/approver/$id'
+  | '/normcontrol/$id'
+  | '/applicant/$id'
 
 export function ApplicationsTable({
   applications,

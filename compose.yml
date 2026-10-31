@@ -105,6 +105,7 @@ services:
       AUTH_ALLOWED_HOSTS: localhost:${COLORPASS_PROTOTYPE_PORT:-5174},localhost:${COLORPASS_PORT:-5173}
       BETTER_AUTH_SECRET: ${PROTOTYPE_AUTH_SECRET:-dev-prototype-secret-change-me-0123456789}
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
+      NORMCONTROL_EMAILS: ${NORMCONTROL_EMAILS:-}
       CHAT_URL: http://chat:3000
     volumes:
       - ./applications-api/src:/app/src    # код — с диска

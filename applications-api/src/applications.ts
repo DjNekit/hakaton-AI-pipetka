@@ -4,18 +4,24 @@ import path from 'node:path'
 
 import Database from 'better-sqlite3'
 
-import type {
-  AiReview,
-  Application,
-  ApplicationStatus,
-  DocumentType,
+import {
+  APPLICATION_STATUSES,
+  type AiReview,
+  type Application,
+  type ApproverReview,
+  type Decision,
+  type DocumentType,
+  type ReviewItem,
 } from './model'
 
 import type { CurrentUser } from './current-user'
 
-type Row = Omit<Application, 'aiReview'> & {
+type Row = Omit<Application, 'aiReview' | 'approverReview' | 'decision'> & {
   filePath: string
+  reviewComment: string
   aiReview: string | null
+  approverReview: string | null
+  decision: string | null
 }
 
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR ?? './uploads')
@@ -46,20 +52,35 @@ function connection() {
   const columns = db
     .prepare<[], { name: string }>('pragma table_info(application)')
     .all()
-  if (!columns.some(column => column.name === 'aiReview')) {
-    db.exec('alter table application add column aiReview text')
+  for (const column of ['aiReview', 'approverReview', 'decision']) {
+    if (!columns.some(existing => existing.name === column)) {
+      db.exec(`alter table application add column ${column} text`)
+    }
   }
+  const known = APPLICATION_STATUSES.map(status => `'${status}'`).join(', ')
+  db.exec(
+    `update application set status = 'review' where status not in (${known})`,
+  )
   return db
+}
+
+function parse<T>(value: string | null) {
+  return value ? (JSON.parse(value) as T) : null
 }
 
 function toApplication({
   filePath: _filePath,
+  reviewComment: _reviewComment,
   aiReview,
+  approverReview,
+  decision,
   ...rest
 }: Row): Application {
   return {
     ...rest,
-    aiReview: aiReview ? (JSON.parse(aiReview) as AiReview) : null,
+    aiReview: parse<AiReview>(aiReview),
+    approverReview: parse<ApproverReview>(approverReview),
+    decision: parse<Decision>(decision),
   }
 }
 
@@ -106,7 +127,7 @@ export async function createApplication(
     connection()
       .prepare(
         `insert into application (id, number, applicantId, applicantName, applicantEmail, documentType, address, description, fileName, filePath, status, reviewComment, createdAt, updatedAt)
-         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'ai_check', '', @now, @now)`,
+         values (@id, @number, @applicantId, @applicantName, @applicantEmail, @documentType, @address, @description, @fileName, @filePath, 'review', '', @now, @now)`,
       )
       .run({
         id,
@@ -124,42 +145,74 @@ export async function createApplication(
   return getApplication(id)!
 }
 
-export function updateApplication(
-  id: string,
-  patch: { status?: ApplicationStatus; reviewComment?: string },
-) {
-  const row = findRow(id)
-  if (!row) return undefined
+function touch(id: string, fields: Record<string, string>) {
+  const columns = Object.keys(fields)
+    .map(column => `${column} = @${column}`)
+    .join(', ')
   connection()
-    .prepare(
-      'update application set status = ?, reviewComment = ?, updatedAt = ? where id = ?',
-    )
-    .run(
-      patch.status ?? row.status,
-      patch.reviewComment ?? row.reviewComment,
-      new Date().toISOString(),
-      id,
-    )
-  return getApplication(id)
+    .prepare(`update application set ${columns}, updatedAt = @now where id = @id`)
+    .run({ ...fields, now: new Date().toISOString(), id })
 }
 
-export function setAiReview(
+function advanceIfReady(id: string) {
+  const application = getApplication(id)
+  if (
+    application?.status === 'review' &&
+    application.approverReview &&
+    (application.aiReview?.state === 'done' ||
+      application.aiReview?.state === 'failed')
+  ) {
+    touch(id, { status: 'normcontrol' })
+  }
+}
+
+export function setAiReview(id: string, aiReview: AiReview) {
+  if (!findRow(id)) return
+  touch(id, { aiReview: JSON.stringify(aiReview) })
+  advanceIfReady(id)
+}
+
+export function submitApproverReview(
   id: string,
-  aiReview: AiReview,
-  status?: ApplicationStatus,
+  reviewer: CurrentUser,
+  input: Pick<ApproverReview, 'recommendation' | 'comment'> & {
+    items: ReviewItem[]
+  },
 ) {
-  const row = findRow(id)
-  if (!row) return
-  connection()
-    .prepare(
-      'update application set aiReview = ?, status = ?, updatedAt = ? where id = ?',
-    )
-    .run(
-      JSON.stringify(aiReview),
-      status ?? row.status,
-      new Date().toISOString(),
-      id,
-    )
+  const application = getApplication(id)
+  if (!application) return { error: 'not_found' as const }
+  if (application.status !== 'review' || application.approverReview) {
+    return { error: 'invalid_state' as const }
+  }
+  const review: ApproverReview = {
+    reviewerId: reviewer.id,
+    reviewerName: reviewer.name,
+    ...input,
+    submittedAt: new Date().toISOString(),
+  }
+  touch(id, { approverReview: JSON.stringify(review) })
+  advanceIfReady(id)
+  return { application: getApplication(id)! }
+}
+
+export function decideApplication(
+  id: string,
+  decider: CurrentUser,
+  input: Pick<Decision, 'decision' | 'comment'>,
+) {
+  const application = getApplication(id)
+  if (!application) return { error: 'not_found' as const }
+  if (application.status !== 'normcontrol') {
+    return { error: 'invalid_state' as const }
+  }
+  const decision: Decision = {
+    deciderId: decider.id,
+    deciderName: decider.name,
+    ...input,
+    decidedAt: new Date().toISOString(),
+  }
+  touch(id, { decision: JSON.stringify(decision), status: input.decision })
+  return { application: getApplication(id)! }
 }
 
 export function readApplicationFile(id: string) {
@@ -168,12 +221,15 @@ export function readApplicationFile(id: string) {
   return { name: row.fileName, data: readFileSync(row.filePath) }
 }
 
-export function forViewer(user: CurrentUser, application: Application) {
-  return user.role === 'approver'
-    ? application
-    : { ...application, aiReview: null }
+export function forViewer(
+  user: CurrentUser,
+  application: Application,
+): Application {
+  if (user.role === 'normcontrol') return application
+  if (user.role === 'approver') return { ...application, aiReview: null }
+  return { ...application, aiReview: null, approverReview: null }
 }
 
 export function canAccess(user: CurrentUser, application: Application) {
-  return user.role === 'approver' || application.applicantId === user.id
+  return user.role !== 'applicant' || application.applicantId === user.id
 }
