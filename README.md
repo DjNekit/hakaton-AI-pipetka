@@ -62,7 +62,8 @@ docker compose down                           # остановить (данны
 
 | Сервис | Что внутри | Порт |
 |---|---|---|
-| `frontend` | Vite dev server, `/api` проксируется на backend | 5173 (`COLORPASS_PORT`) |
+| `frontend` | Vite dev server, `/api` проксируется на backend, `/chat` — на chat | 5173 (`COLORPASS_PORT`) |
+| `chat` | чат по отчёту: Node + TanStack AI, данные из backend, модель — LM Studio | 127.0.0.1:3000 |
 | `backend` | Django `runserver` + ядро проверки, tesseract, сертификаты НУЦ Минцифры | 127.0.0.1:8000 |
 | `db` | PostgreSQL 16: проверки, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
 
@@ -119,6 +120,22 @@ GigaChat API → только правила. Если Gemma отвалилас�
 Закрыли ngrok или LM Studio, уснул ноутбук — следующая проверка на проде пойдёт в GigaChat, перезапуск не нужен.
 Домен постоянный, поэтому секрет задаётся один раз.
 
+### Чат по отчёту (сервис `chat`)
+
+Кнопка «Спросить ИИ» в отчёте открывает чат: инспектор спрашивает «почему TAB-02 — ошибка?», «что исправить
+заявителю?», а модель отвечает по данным этой проверки и сама показывает замечание на листе.
+
+- Отдельный сервис `chat/` на [TanStack AI](https://tanstack.com/ai): Node 22, Hono, без сборки.
+  На фронтенде — хук `useChat` из `@tanstack/ai-react` (`frontend/src/components/ChatPanel.jsx`).
+- Данные сервис берёт из основного бэкенда по HTTP (`BACKEND_URL`) — только чтение: сведения о документе,
+  замечания, чек-лист, правила, таблица отделки или экспликация, сравнения с фото (`chat/src/tools.js`).
+- Клиентские инструменты выполняет браузер: `show_finding`, `show_page`, `open_tab` (`frontend/src/chat/tools.js`).
+- Модель — та же LM Studio, что у бэкенда (`LOCAL_LLM_URL`, `LOCAL_LLM_MODEL`); отдельная —
+  `CHAT_LLM_URL`, `CHAT_LLM_MODEL`. Модель должна уметь вызывать инструменты (Qwen3-VL, Gemma 4 — умеют).
+  Запасного GigaChat у чата нет: LM Studio выключена — чат пишет, что модель недоступна, остальное работает.
+- Вердикт и замечания чат не меняет — только объясняет. Исключить замечание может инспектор кнопкой в списке.
+- В проде Caddy отдаёт `/chat/*` сервису `chat` потоком (SSE).
+
 ### Команды внутри контейнера
 
 | Команда | Что делает |
@@ -157,6 +174,7 @@ PDF ──► ingest ──► вид документа ──► extract / sig
         рендер                                                                                       └─► runs/ (файлы)
 фото ──► photo: развёртка/фотомонтаж ↔ фото, углы фасада, ΔE00 по зонам, карта отличий, вердикт
 Gemma 4 (LM Studio через ngrok), запасная — GigaChat API: разбор записки, заключение, описание отличий на фото
+чат ──► chat (TanStack AI) ──► инструменты: GET /api/checks/{id}, /rules, /comparisons ──► LM Studio
 ```
 
 ```
@@ -180,7 +198,8 @@ backend/
     data/rules.yaml     формализованные требования и пороги
   api/, config/         Django 4.2: /api/*
   devserver.py          тот же API без Django
-frontend/               React 18 + Vite
+frontend/               React 18 + Vite; чат — components/ChatPanel.jsx, chat/tools.js
+chat/                   сервис чата: TanStack AI + Hono (server.js, tools.js — инструменты, prompt.js)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```
 
@@ -196,6 +215,7 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 Решение по документу: `POST /api/checks/{id}/decision` (multipart `decision` — `accepted`/`rejected`, `note` —
 необязательно) ставит статус «Проверен и принят» или «Проверен и отклонён»; через 30 дней файл автоматически
 переносится в архив (`runs/web/archive/`), но остаётся доступен по прямой ссылке.
+Чат: `POST /chat/checks/{id}` (поток AG-UI для `useChat`), `GET /chat/health` (доступна ли модель).
 
 ## Ограничения MVP
 

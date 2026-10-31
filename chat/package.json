@@ -1,0 +1,19 @@
+{
+  "name": "colorpass-chat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Чат по отчёту проверки: TanStack AI, локальная модель в LM Studio, данные — из основного бэкенда",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@tanstack/ai": "^1.0.1",
+    "@tanstack/ai-openai": "^1.0.1",
+    "hono": "^4.6.14",
+    "zod": "^4.1.12"
+  }
+}

@@ -18,6 +18,21 @@ services:
       - caddy-config:/config
     depends_on:
       backend: { condition: service_healthy }
+      chat: { condition: service_started }
+
+  chat:                             # чат по отчёту (TanStack AI): данные — из backend, модель — та же LM Studio через ngrok
+    build: ./chat
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:8000
+      # модель — та же, что у бэкенда (LM Studio); отдельная — CHAT_LLM_URL / CHAT_LLM_MODEL
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
+      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
+      CHAT_LLM_URL: ${CHAT_LLM_URL:-}
+      CHAT_LLM_MODEL: ${CHAT_LLM_MODEL:-}
+    depends_on:
+      backend: { condition: service_healthy }
 
   backend:
     build: ./backend                # gunicorn

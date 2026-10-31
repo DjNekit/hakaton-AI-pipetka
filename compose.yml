@@ -40,13 +40,34 @@ services:
   frontend:
     image: node:20-alpine
     working_dir: /app
-    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"]
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
     environment:
       VITE_API_TARGET: http://backend:8000   # vite проксирует /api на backend
+      VITE_CHAT_TARGET: http://chat:3000     # и /chat — на сервис чата
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules   # зависимости — в томе, не на диске Mac
     ports: ["${COLORPASS_PORT:-5173}:5173"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+  chat:                         # чат по отчёту (TanStack AI): данные — из backend, модель — LM Studio
+    image: node:22-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]   # node --watch: перезапуск при изменении кода
+    environment:
+      BACKEND_URL: http://backend:8000
+      # модель — та же, что у бэкенда (LM Studio); отдельная — CHAT_LLM_URL / CHAT_LLM_MODEL
+      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
+      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
+      CHAT_LLM_URL: ${CHAT_LLM_URL:-}
+      CHAT_LLM_MODEL: ${CHAT_LLM_MODEL:-}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./chat:/app
+      - chat-node-modules:/app/node_modules
+    ports: ["127.0.0.1:${COLORPASS_CHAT_PORT:-3000}:3000"]
     depends_on:
       backend: { condition: service_healthy }
 
@@ -67,3 +88,4 @@ services:
 volumes:
   pgdata:
   frontend-node-modules:
+  chat-node-modules:

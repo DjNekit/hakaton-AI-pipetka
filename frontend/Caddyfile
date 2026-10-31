@@ -13,6 +13,16 @@
 		}
 	}
 
+	# чат по отчёту — отдельный сервис; ответ идёт потоком (SSE), поэтому без буферизации
+	handle /chat/* {
+		reverse_proxy chat:3000 {
+			flush_interval -1
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+
 	handle {
 		root * /srv
 		try_files {path} /index.html

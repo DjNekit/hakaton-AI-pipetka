@@ -9,6 +9,7 @@ import Conclusion from "./Conclusion.jsx";
 import Sheets from "./Sheets.jsx";
 import PhotoCompare from "./PhotoCompare.jsx";
 import Explication from "./Explication.jsx";
+import ChatPanel from "./ChatPanel.jsx";
 
 const TABS = [
   ["findings", "Замечания"],
@@ -29,6 +30,7 @@ export default function Report({ run, useLlm, onUpdate }) {
   const [page, setPage] = useState(null);
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const findings = report.findings;
   const activeFindings = useMemo(() => findings.filter((f) => !f.dismissed), [findings]);
@@ -67,6 +69,29 @@ export default function Report({ run, useLlm, onUpdate }) {
       setBusy(null);
     }
   };
+
+  // Что чат может сделать в отчёте (клиентские инструменты модели). Возвращают false, если показать нечего.
+  const chatHandlers = {
+    showFinding: (id) => {
+      const f = findings.find((x) => x.id.toLowerCase() === String(id).trim().toLowerCase());
+      if (!f) return false;
+      select(f);
+      setTab("findings");
+      return true;
+    },
+    showPage: (index) => {
+      if (!report.pages.some((p) => p.index === index)) return false;
+      setPage(index);
+      setTab("sheets");
+      return true;
+    },
+    openTab: (key) => {
+      if (!tabs.some(([k]) => k === key)) return false;
+      setTab(key);
+      return true;
+    },
+  };
+
 
   const status = runStatus(run);
   const decided = Boolean(run.decision && !run.archived_at);
@@ -138,7 +163,10 @@ export default function Report({ run, useLlm, onUpdate }) {
             {key === "findings" && activeFindings.length > 0 && <span className="tab-count">{activeFindings.length}</span>}
           </button>
         ))}
-        <a className="tab tab-link" href={api.fileUrl(run.id, "report.json")} target="_blank" rel="noreferrer">
+        <button type="button" className={`tab tab-link tab-chat${chatOpen ? " is-active" : ""}`} onClick={() => setChatOpen((o) => !o)}>
+          Спросить ИИ
+        </button>
+        <a className="tab" href={api.fileUrl(run.id, "report.json")} target="_blank" rel="noreferrer">
           Отчёт JSON
         </a>
       </nav>
@@ -169,6 +197,15 @@ export default function Report({ run, useLlm, onUpdate }) {
       {tab === "checklist" && <Checklist report={report} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "conclusion" && <Conclusion run={run} onUpdate={onUpdate} />}
       {tab === "photo" && <PhotoCompare run={run} useLlm={useLlm} />}
+      {chatOpen && (
+        <ChatPanel
+          key={run.id}
+          run={run}
+          handlers={chatHandlers}
+          ui={{ tab, selected, page: page ?? defaultPage }}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </article>
   );
 }
