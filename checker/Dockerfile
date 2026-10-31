@@ -1,4 +1,4 @@
-# Сервис processor: проверка PDF, OCR, листы, сравнение фото, Excel и хранение файлов (runs/).
+# Сервис checker: проверка PDF, OCR, листы, сравнение фото, Excel и хранение файлов (runs/).
 # Задачи берёт из очереди Redis, файлы отдаёт по HTTP (/files/…).
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -11,8 +11,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        tesseract-ocr-rus \
        libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/* || true
-# Раскладка как в репозитории: /app/processor, /app/dataset и /app/runs монтируются из compose
-WORKDIR /app/processor
+# Раскладка как в репозитории: /app/checker, /app/dataset и /app/runs монтируются из compose
+WORKDIR /app/checker
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .

@@ -1,4 +1,4 @@
-# Новый интерфейс (/new): сборка SPA и раздача статики. Серверная часть — сервис prototype-api.
+# Новый интерфейс (/new): сборка SPA и раздача статики. Серверная часть — сервис applications-api.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable

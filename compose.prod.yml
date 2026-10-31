@@ -1,7 +1,7 @@
 # Прод: образы собираются на сервере, наружу смотрит только Caddy (80/443, сертификат Let's Encrypt).
 #   docker compose -f compose.prod.yml up -d --build
 # Разворачивается автоматически при пуше в main (.github/workflows/deploy.yml); .env на сервере пишет CI.
-# Caddy: /api → backend, /files → processor, /chat → chat, /new → новый интерфейс (prototype + prototype-api),
+# Caddy: /api → backend, /files → checker, /chat → chat, /new → новый интерфейс (prototype + applications-api),
 # остальное — собранный React (прежний интерфейс).
 name: colorpass
 
@@ -20,24 +20,24 @@ services:
       - caddy-config:/config
     depends_on:
       backend: { condition: service_healthy }
-      processor: { condition: service_started }
+      checker: { condition: service_started }
       chat: { condition: service_started }
       prototype: { condition: service_started }
-      prototype-api: { condition: service_started }
+      applications-api: { condition: service_started }
 
   prototype:                        # новый интерфейс: собранная статика (SPA) на /new
     build: ./prototype
     restart: always
 
-  prototype-api:                    # серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat
-    build: ./prototype-api
+  applications-api:                    # серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat
+    build: ./applications-api
     restart: always
     environment:
       BETTER_AUTH_URL: https://${DOMAIN:-ai-pipetka.fun}
       BETTER_AUTH_SECRET: ${PROTOTYPE_AUTH_SECRET:?задайте PROTOTYPE_AUTH_SECRET}
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
       CHAT_URL: http://chat:3000
-    volumes: ["prototype-data:/data"]   # SQLite и загруженные PDF
+    volumes: ["applications-data:/data"]   # SQLite и загруженные PDF
     depends_on:
       chat: { condition: service_started }
 
@@ -60,8 +60,8 @@ services:
       retries: 12
       start_period: 30s
 
-  processor:
-    build: ./processor              # проверка PDF, OCR, листы, сравнение фото, Excel, файлы
+  checker:
+    build: ./checker              # проверка PDF, OCR, листы, сравнение фото, Excel, файлы
     restart: always
     environment:
       REDIS_URL: redis://redis:6379/0
@@ -79,7 +79,7 @@ services:
     restart: always
     environment:
       BACKEND_URL: http://backend:8000
-      FILES_URL: http://processor:8001/files
+      FILES_URL: http://checker:8001/files
       # языковая модель — GigaChat API; без ключа ИИ-функции недоступны, проверка по правилам работает
       GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
       GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
@@ -116,6 +116,6 @@ services:
 volumes:
   pgdata:
   redis-data:
-  prototype-data:
+  applications-data:
   caddy-data:
   caddy-config:

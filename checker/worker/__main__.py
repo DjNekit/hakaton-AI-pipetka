@@ -1,4 +1,4 @@
-"""Запуск сервиса processor: HTTP для файлов + воркеры очереди Redis.
+"""Запуск сервиса checker: HTTP для файлов + воркеры очереди Redis.
 
   python -m worker
 
@@ -111,7 +111,7 @@ def main() -> None:
         t.start()
     port = int(os.getenv("PORT", "8001"))
     httpd = serve(port)
-    log.info("processor: файлы http://0.0.0.0:%s/files, воркеров %s + %s, Redis %s:%s, данные %s", port, heavy, light, r.host, r.port, storage.RUNS)
+    log.info("checker: файлы http://0.0.0.0:%s/files, воркеров %s + %s, Redis %s:%s, данные %s", port, heavy, light, r.host, r.port, storage.RUNS)
     try:
         httpd.serve_forever()
     finally:

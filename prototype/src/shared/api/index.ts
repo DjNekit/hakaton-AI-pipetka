@@ -1,4 +1,4 @@
-// Клиент живёт на /new, его серверная часть — сервис prototype-api на /new/api (Caddy или прокси Vite).
+// Клиент живёт на /new, его серверная часть — сервис applications-api на /new/api (Caddy или прокси Vite).
 export const API_BASE = '/new/api'
 
 export function apiUrl(path: string) {

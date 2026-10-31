@@ -1,5 +1,5 @@
 // Обращения к основному бэкенду (Django API): чат берёт отсюда данные и сюда сохраняет ответы модели;
-// файлы документов — у сервиса processor (FILES_URL).
+// файлы документов — у сервиса checker (FILES_URL).
 import { config } from "./config.js";
 
 export class BackendError extends Error {
@@ -30,7 +30,7 @@ const id = encodeURIComponent;
 export const backend = {
   check: (checkId) => get(`/checks/${id(checkId)}`),
   comparisons: (checkId) => get(`/checks/${id(checkId)}/comparisons`),
-  /** Файл документа (картинка листа, сравнения) — у сервиса processor, в base64 для модели. */
+  /** Файл документа (картинка листа, сравнения) — у сервиса checker, в base64 для модели. */
   fileBase64: async (checkId, rel) => {
     const res = await fetch(`${config.filesUrl}/${id(checkId)}/${rel}`, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new BackendError(`Файлы: HTTP ${res.status} на ${rel}`, res.status);

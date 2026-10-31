@@ -1,4 +1,4 @@
-"""HTTP сервиса processor: отдача файлов документов и приём загрузок. Остальное — через очередь Redis.
+"""HTTP сервиса checker: отдача файлов документов и приём загрузок. Остальное — через очередь Redis.
 
   GET  /files/<doc>/<путь>           листы, развёртки, карты отличий, Excel… (package/… — фото пакета)
   GET  /files/samples/<имя>.pdf      PDF образца из dataset/
@@ -38,11 +38,11 @@ def parse_multipart(content_type: str, body: bytes) -> list[tuple[str, str, byte
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "colorpass-processor"
+    server_version = "colorpass-checker"
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("processor %s %s\n" % (self.command, self.path[:160]))
+        sys.stderr.write("checker %s %s\n" % (self.command, self.path[:160]))
 
     def _json(self, data, status: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")

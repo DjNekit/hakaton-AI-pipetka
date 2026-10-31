@@ -22,7 +22,7 @@ interface MyRouterContext {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  // Сессия — запросом к prototype-api (better-auth); перед каждым переходом, как раньше на сервере.
+  // Сессия — запросом к applications-api (better-auth); перед каждым переходом, как раньше на сервере.
   beforeLoad: async () => {
     const { data } = await authClient.getSession()
     return { session: data }

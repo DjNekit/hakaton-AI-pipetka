@@ -95,7 +95,7 @@ export default function App() {
     }
   };
 
-  // файлы → processor (загрузка) → бэкенд (пакет и очередь проверки)
+  // файлы → checker (загрузка) → бэкенд (пакет и очередь проверки)
   const uploadPackage = async (files, title) => {
     setError(null);
     setUploading(`Загружаю ${files.length} ${files.length === 1 ? "файл" : files.length < 5 ? "файла" : "файлов"}…`);

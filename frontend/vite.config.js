@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// В режиме разработки: /api → Django, /files → processor (файлы и загрузки), /chat → сервис моделей
+// В режиме разработки: /api → Django, /files → checker (файлы и загрузки), /chat → сервис моделей
 export default defineConfig({
   plugins: [react()],
   server: {

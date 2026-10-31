@@ -39,7 +39,7 @@ MVP для хакатона «Архитектура цифрового горо
 
 ![Сравнение фото с развёрткой: карта отличий, цвета зон, вывод](docs/screenshot-photo.png)
 
-**Языковая модель — GigaChat API (облако Сбера), только в сервисе `chat`**. Бэкенд и processor к модели не обращаются:
+**Языковая модель — GigaChat API (облако Сбера), только в сервисе `chat`**. Бэкенд и checker к модели не обращаются:
 проверка документа, разбор пояснительной записки и сравнение фото — правила и код. Сервис `chat` отвечает на вопросы
 по отчёту, по кнопке формулирует заключение и описывает отличия на фото, а результат сохраняет в бэкенд через его
 API. Модель — помощник, а не судья: решения «соответствует / нет» принимает код по `rules.yaml`. Без ключа GigaChat
@@ -47,7 +47,7 @@ API. Модель — помощник, а не судья: решения «с�
 
 **Отчёт**: штамп-вердикт, каждое замечание выделено на листе, колеры «заявлено / фактически» с ΔE, таблица отделки
 или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md, Excel). Журнал пакетов,
-отчёты, решения и сравнения — в **PostgreSQL**, файлы документов — у сервиса `processor` в `./runs`.
+отчёты, решения и сравнения — в **PostgreSQL**, файлы документов — у сервиса `checker` в `./runs`.
 
 ## Запуск
 
@@ -55,8 +55,8 @@ API. Модель — помощник, а не судья: решения «с�
 
 | Файл | Для чего | Что запускает |
 |---|---|---|
-| `compose.yml` | локальная разработка | Django `runserver`, Vite, processor, chat, новый интерфейс и его API (код смонтирован), Redis, PostgreSQL |
-| `compose.prod.yml` | сервер | сборка образов: gunicorn, processor, chat, prototype, prototype-api, Caddy (HTTPS, прокси), Redis, PostgreSQL |
+| `compose.yml` | локальная разработка | Django `runserver`, Vite, checker, chat, новый интерфейс и его API (код смонтирован), Redis, PostgreSQL |
+| `compose.prod.yml` | сервер | сборка образов: gunicorn, checker, chat, prototype, applications-api, Caddy (HTTPS, прокси), Redis, PostgreSQL |
 
 ### Локально
 
@@ -68,16 +68,16 @@ docker compose down                           # остановить (данны
 
 | Сервис | Что внутри | Порт |
 |---|---|---|
-| `frontend` | Vite dev server: `/api` → backend, `/files` → processor, `/chat` → chat, `/new` → prototype | 5173 (`COLORPASS_PORT`) |
-| `prototype` | новый интерфейс (Vite dev server, base `/new/`): `/new/api` → prototype-api | 5174 (`COLORPASS_PROTOTYPE_PORT`) → http://localhost:5174/new/ |
-| `prototype-api` | серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat | 127.0.0.1:3100 |
+| `frontend` | Vite dev server: `/api` → backend, `/files` → checker, `/chat` → chat, `/new` → prototype | 5173 (`COLORPASS_PORT`) |
+| `prototype` | новый интерфейс (Vite dev server, base `/new/`): `/new/api` → applications-api | 5174 (`COLORPASS_PROTOTYPE_PORT`) → http://localhost:5174/new/ |
+| `applications-api` | серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat | 127.0.0.1:3100 |
 | `backend` | Django `runserver`: API, журнал пакетов, отчёты, решения; файлов и PDF не касается | 127.0.0.1:8000 |
-| `processor` | проверка PDF (tesseract, OpenCV), листы, сравнение фото, Excel, файлы `runs/`; задачи — из Redis | 127.0.0.1:8001 |
+| `checker` | проверка PDF (tesseract, OpenCV), листы, сравнение фото, Excel, файлы `runs/`; задачи — из Redis | 127.0.0.1:8001 |
 | `chat` | языковая модель GigaChat API: Node + TanStack AI; чат, заключение, описание фото | 127.0.0.1:3000 |
-| `redis` | очередь задач backend → processor и готовые результаты | 127.0.0.1:6379 |
+| `redis` | очередь задач backend → checker и готовые результаты | 127.0.0.1:6379 |
 | `db` | PostgreSQL 16: пакеты, документы с отчётами, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
 
-Код processor после правок подхватывается перезапуском: `docker compose restart processor`.
+Код checker после правок подхватывается перезапуском: `docker compose restart checker`.
 
 ### Прод: https://ai-pipetka.fun
 
@@ -100,20 +100,20 @@ Docker на сервере ставится при первом деплое, е
 - `prototype/` — клиент: React 19, TanStack Router (файловые маршруты в `src/pages`), Query, Form, shadcn/ui.
   Собирается в статику с базой `/new/` и раздаётся своим Caddy (`prototype/Dockerfile`); общий Caddy отправляет
   туда `/new/*`. Серверного рендеринга нет: сессию клиент получает запросом к better-auth.
-- `prototype-api/` — серверная логика, вынесенная из прототипа: Node 22 + Hono, better-auth (вход по паролю и
-  по коду, подтверждение почты, сброс пароля), заявки и PDF (SQLite + том `prototype-data`), проверка заявки
+- `applications-api/` — серверная логика, вынесенная из прототипа: Node 22 + Hono, better-auth (вход по паролю и
+  по коду, подтверждение почты, сброс пароля), заявки и PDF (SQLite + том `applications-data`), проверка заявки
   по чек-листу (пока демонстрационная), ассистент заявителя — через сервис `chat` (GigaChat API).
   Адреса: `/new/api/auth/*`, `/new/api/applications`, `/new/api/applications/{id}`, `…/{id}/file`, `/new/api/chat`.
 - Роль «согласующий» получают адреса из `APPROVER_EMAILS` (переменная окружения `production` в GitHub), остальные —
   заявители. Секрет better-auth в проде — секрет `PROTOTYPE_AUTH_SECRET` (пока его нет, используется `DJANGO_SECRET_KEY`).
 - Почта пока не отправляется: коды подтверждения и ссылки сброса пароля пишутся в лог
-  (`docker compose -f compose.prod.yml logs prototype-api`); вне продакшена последнее письмо отдаёт
+  (`docker compose -f compose.prod.yml logs applications-api`); вне продакшена последнее письмо отдаёт
   `GET /new/api/dev/mailbox/{email}`.
 
 ### Языковая модель: GigaChat API (сервис `chat`)
 
 Всё, что связано с моделью, — в сервисе `chat/` (Node 22, Hono, [TanStack AI](https://tanstack.com/ai)). Данные
-проверок `chat` берёт из бэкенда по HTTP (`BACKEND_URL`), картинки — у processor (`FILES_URL`), а ответы модели
+проверок `chat` берёт из бэкенда по HTTP (`BACKEND_URL`), картинки — у checker (`FILES_URL`), а ответы модели
 сохраняет в бэкенд (`POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`).
 Доступен ли GigaChat — в правом верхнем углу интерфейса.
 
@@ -137,10 +137,10 @@ Docker на сервере ставится при первом деплое, е
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec processor python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
-| `docker compose exec processor python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
-| `docker compose exec processor python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
-| `docker compose exec processor python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
+| `docker compose exec checker python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
+| `docker compose exec checker python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
+| `docker compose exec checker python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
+| `docker compose exec checker python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
 | `docker compose exec db psql -U colorpass -c "select title, verdict from packages"` | журнал пакетов в базе |
 | `docker compose exec redis redis-cli llen cp:jobs` | сколько пакетов ждёт в очереди |
 
@@ -164,13 +164,13 @@ Docker на сервере ставится при первом деплое, е
 ## Как это устроено
 
 ```
-браузер ──► /files/uploads ──► processor: файлы пакета (PDF, фото) → runs/uploads
+браузер ──► /files/uploads ──► checker: файлы пакета (PDF, фото) → runs/uploads
         ──► POST /api/packages ──► backend: пакет и документы в PostgreSQL ──► Redis cp:jobs ──┐
                                                                                               ▼
-processor (воркеры): ingest ──► вид документа ──► extract / signage ──► checks ──► отчёт, листы, развёртки
+checker (воркеры): ingest ──► вид документа ──► extract / signage ──► checks ──► отчёт, листы, развёртки
                      текст, таблицы, рендер, OCR    паспорт / вывески    rules.yaml: 114-ПП, 902-ПП, АХК
                      после всех документов — сверка пакета (PKG-01…03) ──► Redis cp:result:* ──► backend → база
-быстрые операции с файлами (развёртки, углы, сравнение фото, пересчёт листов, Excel): backend ──► Redis cp:rpc ──► processor
+быстрые операции с файлами (развёртки, углы, сравнение фото, пересчёт листов, Excel): backend ──► Redis cp:rpc ──► checker
 chat (TanStack AI) ──► GigaChat API: чат по отчёту, заключение, описание отличий на фото
      данные — GET /api/checks/{id}; картинки — /files; ответы модели — POST /api/checks/{id}/conclusion, …/review
 ```
@@ -182,10 +182,10 @@ chat (TanStack AI) ──► GigaChat API: чат по отчёту, заклю�
 
 ```
 backend/                Django 4.2: /api/* — пакеты, документы, решения, ответы модели
-  core/service.py       пакеты, синхронизация результатов, пересчёт через processor, решения, архив
+  core/service.py       пакеты, синхронизация результатов, пересчёт через checker, решения, архив
   core/store.py         PostgreSQL (DATABASE_URL); без базы — в памяти процесса (для разработки)
-  core/redisq.py        клиент Redis и формат очередей (копия processor/worker/redisq.py)
-processor/
+  core/redisq.py        клиент Redis и формат очередей (копия checker/worker/redisq.py)
+checker/
   colorpass/            ядро проверки (не зависит от веба)
     ingest.py           чтение PDF, рендер, OCR сканов
     extract.py          паспорт: классификация листов, модель паспорта, выноски
@@ -205,25 +205,25 @@ processor/
                         по HTTP (fileserver.py), раскладка runs/ (storage.py)
 frontend/               React 18 + Vite; пакет — components/PackageView.jsx, чат — components/ChatPanel.jsx
 prototype/              новый интерфейс (/new): React 19 + TanStack Router, статика
-prototype-api/          его серверная часть: Hono + better-auth + SQLite (src/index.ts — маршруты /new/api)
+applications-api/          его серверная часть: Hono + better-auth + SQLite (src/index.ts — маршруты /new/api)
 chat/                   языковая модель: TanStack AI + Hono (server.js, llm.js — GigaChat API, tasks.js —
                         заключение и описание фото, prompt.js — промпт чата с данными проверки)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```
 
 API бэкенда (JSON):
-- пакеты: `POST /api/packages` (`uploads` — ответ processor на загрузку, `samples` — имена образцов, `title`),
+- пакеты: `POST /api/packages` (`uploads` — ответ checker на загрузку, `samples` — имена образцов, `title`),
   `GET /api/packages`, `GET /api/packages/{id}` (документы, ход проверки, сверка, фото), `POST /api/samples/{name}/check`;
 - документ: `GET /api/checks/{id}` (статус + отчёт), `GET /api/checks/{id}/report.json`, `…/conclusion.md`,
-  `…/export.xlsx` (перенаправляет на файл processor);
+  `…/export.xlsx` (перенаправляет на файл checker);
 - замечания: `POST /api/checks/{id}/change_status` (`finding_id`, `action` — `dismiss`/`restore`/`delete`, `reason`) —
-  processor пересчитывает вердикт, чек-лист, заключение и листы с рамками;
+  checker пересчитывает вердикт, чек-лист, заключение и листы с рамками;
 - решение: `POST /api/checks/{id}/decision` (`decision` — `accepted`/`rejected`, `note`); через 30 дней файлы
-  документа уходят в архив processor (`runs/archive/`), ссылки работают;
+  документа уходят в архив checker (`runs/archive/`), ссылки работают;
 - сравнение фото: `GET /api/checks/{id}/blocks`, `POST /api/checks/{id}/corners` (`upload_id` или `photo_block`),
   `POST /api/checks/{id}/comparisons` (`facade`, `upload_id` или `photo_block`, `quad`, `rect`), `GET …/comparisons`;
 - ответы модели (присылает `chat`): `POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`;
-- `GET /api/health` — база, Redis, жив ли processor; `GET /api/rules`, `GET /api/samples`.
+- `GET /api/health` — база, Redis, жив ли checker; `GET /api/rules`, `GET /api/samples`.
 
 Processor: `POST /files/uploads` (multipart `files`, можно несколько), `GET /files/{doc}/{путь}` (листы, развёртки,
 карты отличий, Excel; `package/…` — фото пакета), `GET /files/samples/{имя}.pdf`.

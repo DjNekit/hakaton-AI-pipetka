@@ -2,7 +2,7 @@
 //   POST /chat/checks/:id                              диалог по отчёту: поток AG-UI (SSE) для useChat на фронтенде
 //   POST /chat/checks/:id/conclusion                   заключение моделью → сохраняется в бэкенд, ответ — проверка
 //   POST /chat/checks/:id/comparisons/:cid/review      описание отличий на фото → сохраняется в бэкенд, ответ — сравнение
-//   POST /chat/assistant                               ассистент заявителя в новом интерфейсе (/new) — вызывает prototype-api
+//   POST /chat/assistant                               ассистент заявителя в новом интерфейсе (/new) — вызывает applications-api
 //   GET  /chat/health                                  доступен ли GigaChat
 // Данные проверок — из основного бэкенда (BACKEND_URL).
 import { serve } from "@hono/node-server";

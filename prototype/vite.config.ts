@@ -30,11 +30,11 @@ export default defineConfig({
     options: { typeAware: true, typeCheck: true },
     ignorePatterns: ['**/*.gen.ts'],
   },
-  // Клиент — статика (SPA) на /new; серверная часть — сервис prototype-api на /new/api.
+  // Клиент — статика (SPA) на /new; серверная часть — сервис applications-api на /new/api.
   base: '/new/',
   server: {
     proxy: {
-      '/new/api': process.env.VITE_PROTOTYPE_API ?? 'http://127.0.0.1:3100',
+      '/new/api': process.env.VITE_APPLICATIONS_API ?? 'http://127.0.0.1:3100',
     },
   },
   resolve: { tsconfigPaths: true },

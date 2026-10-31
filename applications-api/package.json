@@ -1,5 +1,5 @@
 {
-  "name": "colorpass-prototype-api",
+  "name": "colorpass-applications-api",
   "private": true,
   "type": "module",
   "description": "Серверная логика нового интерфейса (/new): авторизация, заявки, проверка, ассистент",

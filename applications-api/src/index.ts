@@ -1,4 +1,4 @@
-// Сервис prototype-api: серверная логика нового интерфейса (клиент — prototype/, адрес /new).
+// Сервис applications-api: серверная логика нового интерфейса (клиент — prototype/, адрес /new).
 //   /new/api/auth/*                     better-auth: регистрация, вход, коды, сброс пароля
 //   GET/POST /new/api/applications      заявки (заявитель — свои, согласующий — все)
 //   GET/PATCH /new/api/applications/:id заявка; решение согласующего
@@ -139,5 +139,5 @@ app.get('/dev/mailbox/:email', c => {
 
 const port = Number(process.env.PORT ?? 3100)
 serve({ fetch: app.fetch, port }, () => {
-  console.log(`prototype-api: http://0.0.0.0:${port}/new/api, chat ${CHAT_URL}`)
+  console.log(`applications-api: http://0.0.0.0:${port}/new/api, chat ${CHAT_URL}`)
 })

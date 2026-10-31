@@ -4,7 +4,7 @@ import { createAppQueryClient } from '@/shared/query'
 
 import { routeTree } from './routeTree.gen'
 
-// Клиент — статика (SPA) на /new; серверная часть — сервис prototype-api (/new/api).
+// Клиент — статика (SPA) на /new; серверная часть — сервис applications-api (/new/api).
 export function getRouter() {
   const queryClient = createAppQueryClient()
 

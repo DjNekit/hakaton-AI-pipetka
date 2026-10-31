@@ -1,14 +1,14 @@
 # Локальная разработка: код всех сервисов смонтирован в контейнеры.
 #   docker compose up --build       → интерфейс http://localhost:5173, API http://localhost:8000/api/health
 # Сервисы:
-#   frontend   React (Vite): /api → backend, /files → processor, /chat → chat, /new → новый интерфейс
-#   prototype      новый интерфейс (TanStack Router, Vite) на /new — http://localhost:5174/new/
-#   prototype-api  серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat
-#   backend    Django: API, PostgreSQL, журнал пакетов, решения инспектора; файлов не касается
-#   processor  проверка PDF, OCR, листы, сравнение фото, Excel, хранение файлов (runs/); задачи — из очереди Redis
-#   chat       языковая модель (GigaChat API): чат по отчёту, заключение, описание фото
-#   redis      очередь задач backend → processor и готовые результаты
-#   db         PostgreSQL
+#   frontend         React (Vite): /api → backend, /files → checker, /chat → chat, /new → новый интерфейс
+#   prototype        новый интерфейс (TanStack Router, Vite) на /new — http://localhost:5174/new/
+#   applications-api  серверная часть нового интерфейса: better-auth, заявки (SQLite), ассистент через chat
+#   backend          Django: API, PostgreSQL, журнал пакетов, решения инспектора; файлов не касается
+#   checker          проверка PDF, OCR, листы, сравнение фото, Excel, хранение файлов (runs/); задачи — из очереди Redis
+#   chat             языковая модель (GigaChat API): чат по отчёту, заключение, описание фото
+#   redis            очередь задач backend → checker и готовые результаты
+#   db               PostgreSQL
 # Прод — compose.prod.yml (сборка образов: gunicorn, Caddy со статикой и HTTPS).
 name: colorpass-dev
 
@@ -34,15 +34,15 @@ services:
       retries: 12
       start_period: 20s
 
-  processor:
-    build: ./processor
+  checker:
+    build: ./checker
     environment:
       REDIS_URL: redis://redis:6379/0
       COLORPASS_WORKERS: "2"        # пакетов одновременно
       COLORPASS_RPC_WORKERS: "4"    # быстрые операции: развёртки, углы, сравнение фото, Excel
       COLORPASS_MAX_UPLOAD_MB: "100"
     volumes:
-      - ./processor:/app/processor  # код — с диска (после правок: docker compose restart processor)
+      - ./checker:/app/checker  # код — с диска (после правок: docker compose restart checker)
       - ./runs:/app/runs            # файлы документов и пакетов
       - ./dataset:/app/dataset      # образцы с разметкой
     ports: ["127.0.0.1:${COLORPASS_FILES_PORT:-8001}:8001"]
@@ -55,7 +55,7 @@ services:
     command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"]
     environment:
       VITE_API_TARGET: http://backend:8000      # vite проксирует /api на backend
-      VITE_FILES_TARGET: http://processor:8001  # /files — на processor (загрузка и файлы документов)
+      VITE_FILES_TARGET: http://checker:8001  # /files — на checker (загрузка и файлы документов)
       VITE_CHAT_TARGET: http://chat:3000        # /chat — на сервис моделей
       VITE_PROTOTYPE_TARGET: http://prototype:3000   # /new — новый интерфейс (переключатель в шапке)
     volumes:
@@ -70,7 +70,7 @@ services:
     command: ["node", "--watch", "src/server.js"]   # перезапуск при изменении кода
     environment:
       BACKEND_URL: http://backend:8000
-      FILES_URL: http://processor:8001/files
+      FILES_URL: http://checker:8001/files
       # языковая модель — GigaChat API; без ключа ИИ-функции недоступны, проверка по правилам работает
       GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
       GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
@@ -82,22 +82,22 @@ services:
     depends_on:
       backend: { condition: service_healthy }
 
-  prototype:                    # новый интерфейс: Vite dev server, base /new/; /new/api → prototype-api
+  prototype:                    # новый интерфейс: Vite dev server, base /new/; /new/api → applications-api
     image: node:22-bookworm-slim
     working_dir: /app
     command: ["sh", "-c", "corepack enable && pnpm install && pnpm dev --host 0.0.0.0"]
     environment:
-      VITE_PROTOTYPE_API: http://prototype-api:3100
+      VITE_APPLICATIONS_API: http://applications-api:3100
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
     volumes:
       - ./prototype:/app
       - prototype-node-modules:/app/node_modules   # зависимости — в томе (на Mac свои, под macOS)
     ports: ["${COLORPASS_PROTOTYPE_PORT:-5174}:3000"]
     depends_on:
-      - prototype-api
+      - applications-api
 
-  prototype-api:                # серверная часть нового интерфейса
-    build: ./prototype-api
+  applications-api:                # серверная часть нового интерфейса
+    build: ./applications-api
     command: ["npx", "tsx", "watch", "src/index.ts"]
     environment:
       NODE_ENV: development
@@ -107,9 +107,9 @@ services:
       APPROVER_EMAILS: ${APPROVER_EMAILS:-}
       CHAT_URL: http://chat:3000
     volumes:
-      - ./prototype-api/src:/app/src    # код — с диска
-      - prototype-data:/data            # SQLite и загруженные PDF
-    ports: ["127.0.0.1:${COLORPASS_PROTOTYPE_API_PORT:-3100}:3100"]
+      - ./applications-api/src:/app/src    # код — с диска
+      - applications-data:/data            # SQLite и загруженные PDF
+    ports: ["127.0.0.1:${COLORPASS_APPLICATIONS_API_PORT:-3100}:3100"]
     depends_on:
       - chat
 
@@ -143,4 +143,4 @@ volumes:
   redis-data:
   frontend-node-modules:
   prototype-node-modules:
-  prototype-data:
+  applications-data:

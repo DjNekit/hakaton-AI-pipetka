@@ -1,7 +1,7 @@
 // Настройки сервиса chat — единственного места, где работает языковая модель (GigaChat API).
 //
 //   BACKEND_URL=http://backend:8000          основной бэкенд (Django): данные проверок, сюда же сохраняются ответы модели
-//   FILES_URL=http://processor:8001/files    файлы документов (листы, развёртки, карты отличий) — сервис processor
+//   FILES_URL=http://checker:8001/files    файлы документов (листы, развёртки, карты отличий) — сервис checker
 //
 //   Языковая модель — GigaChat API (Сбер):
 //   GIGACHAT_AUTH_KEY=                       ключ авторизации (Base64 от «Client ID:Client Secret»)
@@ -23,7 +23,7 @@ function gigachatKey() {
 export const config = {
   port: Number(env("PORT", "3000")),
   backendUrl: env("BACKEND_URL", "http://backend:8000").replace(/\/+$/, ""),
-  filesUrl: env("FILES_URL", "http://processor:8001/files").replace(/\/+$/, ""),
+  filesUrl: env("FILES_URL", "http://checker:8001/files").replace(/\/+$/, ""),
   timeoutMs: Number(env("LLM_TIMEOUT", "300")) * 1000,
   gigachat: {
     key: gigachatKey(),

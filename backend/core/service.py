@@ -1,6 +1,6 @@
 """Сервисный слой бэкенда (не зависит от Django): пакеты, документы, журнал, решения инспектора.
 
-Файлов и PDF бэкенд не касается. Проверку пакета он ставит в очередь Redis (сервис processor), быстрые операции
+Файлов и PDF бэкенд не касается. Проверку пакета он ставит в очередь Redis (сервис checker), быстрые операции
 с файлами (развёртки, углы, сравнение фото, пересчёт листов, Excel) запрашивает через ту же очередь с ответом,
 а готовые отчёты забирает из Redis в базу при первом обращении (sync). Языковые модели — сервис chat.
 """
@@ -38,7 +38,7 @@ class BadRequest(Exception):
 
 
 class Unavailable(Exception):
-    """Сервис processor или Redis недоступны."""
+    """Сервис checker или Redis недоступны."""
 
 
 def _now() -> str:
@@ -66,7 +66,7 @@ def redis() -> Redis:
 
 
 def rpc(kind: str, args: dict, timeout: int = RPC_TIMEOUT):
-    """Быстрая операция в processor: задача в очередь cp:rpc, ответ — в cp:reply:<id>."""
+    """Быстрая операция в checker: задача в очередь cp:rpc, ответ — в cp:reply:<id>."""
     try:
         key = push_job(redis(), RPC, kind, args, reply=True)
         raw = redis().blpop(key, timeout=timeout)
@@ -109,10 +109,10 @@ def health() -> dict:
     try:
         beat = redis().get(HEARTBEAT)
         queue = {"ok": True}
-        processor = {"ok": bool(beat), **(json.loads(beat) if beat else {"error": "сервис processor не отвечает"})}
+        checker = {"ok": bool(beat), **(json.loads(beat) if beat else {"error": "сервис checker не отвечает"})}
     except OSError as exc:
-        queue, processor = {"ok": False, "error": str(exc)[:200]}, {"ok": False}
-    return {"ok": True, "db": db, "queue": queue, "processor": processor}
+        queue, checker = {"ok": False, "error": str(exc)[:200]}, {"ok": False}
+    return {"ok": True, "db": db, "queue": queue, "checker": checker}
 
 
 def rules() -> dict:
@@ -130,7 +130,7 @@ def _archive_days() -> int:
         return 30
 
 
-# ================================================================= результаты processor → база
+# ================================================================= результаты checker → база
 
 _SYNC_LOCK = threading.Lock()
 
@@ -219,7 +219,7 @@ def _live(status: dict) -> dict:
 
 def create_package(uploads: list[dict] | None = None, samples_: list[str] | None = None, title: str = "") -> dict:
     """Пакет документов одной заявки: PDF — документы (паспорт, дизайн-проект вывесок), JPEG/PNG — фото объекта.
-    uploads — ответ processor на загрузку: [{id, name, kind}]; samples_ — имена образцов из dataset/."""
+    uploads — ответ checker на загрузку: [{id, name, kind}]; samples_ — имена образцов из dataset/."""
     uploads = [u for u in (uploads or []) if isinstance(u, dict)]
     for u in uploads:
         if not _valid(u.get("id")) or u.get("kind") not in ("pdf", "image"):
@@ -301,7 +301,7 @@ def start_sample(name: str) -> dict:
 
 
 def _maybe_archive(status: dict) -> dict:
-    """Через 30 дней после решения инспектора файлы документа уходят в архив processor (ссылки работают)."""
+    """Через 30 дней после решения инспектора файлы документа уходят в архив checker (ссылки работают)."""
     if status.get("archived_at") or status.get("decision") not in DECISIONS or not status.get("decided_at"):
         return status
     decided = datetime.fromisoformat(status["decided_at"])
@@ -350,7 +350,7 @@ def _save(status: dict, report: dict | None = None) -> None:
 
 
 def change_finding_status(check_id: str, finding_id: str, action: str = "dismiss", reason: str = "") -> dict:
-    """Исключает замечание как ложное срабатывание, возвращает или удаляет; processor пересчитывает отчёт и листы."""
+    """Исключает замечание как ложное срабатывание, возвращает или удаляет; checker пересчитывает отчёт и листы."""
     action = (action or "").strip().lower()
     if action not in FINDING_ACTIONS:
         raise BadRequest("Действие должно быть dismiss, restore или delete")
@@ -453,7 +453,7 @@ def corners(check_id: str, data: dict) -> dict:
 
 
 def compare_photo(check_id: str, data: dict) -> dict:
-    """Сравнение фото с развёрткой (processor); результат — в базу. Описание моделью добавляет сервис chat."""
+    """Сравнение фото с развёрткой (checker); результат — в базу. Описание моделью добавляет сервис chat."""
     _, report = _done(check_id)
     payload = rpc("compare", {
         "doc_id": check_id, "pages": report.get("pages") or [], "facade": data.get("facade") or "",
