@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import mimetypes
+from io import BytesIO
 
 from django.conf import settings
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -118,6 +119,17 @@ def check_file(request, run_id: str, relpath: str):
     if path.suffix == ".md":
         content_type = "text/markdown; charset=utf-8"
     return FileResponse(open(path, "rb"), content_type=content_type)
+
+
+@api_view(["GET"])
+def check_export(request, run_id: str):
+    data, filename = service.export_excel(run_id)
+    return FileResponse(
+        BytesIO(data),
+        as_attachment=True,
+        filename=filename,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @api_view(["POST"])

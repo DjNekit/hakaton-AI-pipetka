@@ -14,6 +14,7 @@ urlpatterns = [
     path("checks/<str:run_id>/comparisons", views.check_comparisons),
     path("checks/<str:run_id>/corners", views.check_corners),
     path("checks/<str:run_id>/files/<path:relpath>", views.check_file),
+    path("checks/<str:run_id>/export.xlsx", views.check_export),
     path("checks/<str:run_id>/change_status", views.change_status),
     path("checks/<str:run_id>/decision", views.set_decision),
 ]

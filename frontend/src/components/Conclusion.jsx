@@ -56,6 +56,9 @@ export default function Conclusion({ run, onUpdate }) {
           <a className="btn" href={api.fileUrl(run.id, "conclusion.md")} download={`заключение-${run.id}.md`}>
             Скачать .md
           </a>
+          <a className="btn" href={api.exportExcelUrl(run.id)}>
+            Скачать Excel
+          </a>
           {llm.requested && !llm.used && llm.error && <span className="muted">Модель не использована: {llm.error}</span>}
         </footer>
       </section>

@@ -62,5 +62,6 @@ export const api = {
     return request(`/checks/${id}/decision`, { method: "POST", body: fd });
   },
   fileUrl: (id, rel) => `${BASE}/checks/${id}/files/${rel}`,
+  exportExcelUrl: (id) => `${BASE}/checks/${id}/export.xlsx`,
   samplePdfUrl: (name) => `${BASE}/samples/${name}/pdf`,
 };

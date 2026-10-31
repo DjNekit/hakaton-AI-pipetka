@@ -483,6 +483,18 @@ def set_decision(run_id: str, decision: str, note: str = "") -> dict:
         return get_run(run_id)
 
 
+def export_excel(run_id: str) -> tuple[bytes, str]:
+    """Формирует XLSX с чек-листом и заключением; имя файла — паспорт + временная метка."""
+    from .excel import build_report_xlsx, report_filename
+
+    run = get_run(run_id)
+    if run.get("state") != "done" or "report" not in run:
+        raise BadRequest("Проверка паспорта ещё не завершена")
+    report = run["report"]
+    source_name = run.get("file") or report.get("file") or ""
+    return build_report_xlsx(report, source_name), report_filename(report, source_name)
+
+
 def run_file(run_id: str, relpath: str) -> Path:
     run_dir = _run_dir(run_id)
     if not _valid_id(run_id) or run_dir is None:

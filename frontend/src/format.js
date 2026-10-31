@@ -17,12 +17,15 @@ export const DECISION = {
 };
 
 export function runStatus(run) {
-  if (run.archived_at) return { label: "В архиве", short: "Архив", tone: "muted" };
-  if (run.decision && DECISION[run.decision]) return DECISION[run.decision];
-  if (run.state === "error") return { label: "ошибка", short: "ошибка", tone: "error" };
-  if (run.state !== "done") return { label: "идёт проверка", short: "идёт проверка", tone: "muted" };
+  if (run.archived_at) return { label: "В архиве", short: "Архив", title: "В архиве", tone: "muted" };
+  if (run.decision && DECISION[run.decision]) {
+    const decision = DECISION[run.decision];
+    return { label: decision.label, short: decision.short, title: decision.label, tone: decision.tone };
+  }
+  if (run.state === "error") return { label: "ошибка", short: "ошибка", title: "Ошибка проверки", tone: "error" };
+  if (run.state !== "done") return { label: "идёт проверка", short: "идёт проверка", title: "Идёт проверка", tone: "muted" };
   const verdict = VERDICT[run.verdict] || { title: "", short: "", tone: "muted" };
-  return { label: verdict.short, short: verdict.short, tone: verdict.tone };
+  return { label: verdict.short, short: verdict.short, title: verdict.title, tone: verdict.tone };
 }
 
 export const SEVERITY = {

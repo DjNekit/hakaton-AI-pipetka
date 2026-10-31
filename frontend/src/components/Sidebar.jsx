@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { VERDICT, formatTime } from "../format.js";
+import { formatTime, runStatus } from "../format.js";
 
 export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
   const inputRef = useRef(null);
@@ -48,24 +48,27 @@ export default function Sidebar({ runs, currentId, onUpload, onOpen }) {
         <section className="side-block">
           <h2 className="side-title">Журнал проверок</h2>
           <ul className="run-list">
-            {runs.slice(0, 30).map((r) => (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  className={`run${r.id === currentId ? " is-current" : ""}`}
-                  onClick={() => onOpen(r.id)}
-                  aria-current={r.id === currentId ? "page" : undefined}
-                >
-                  <span className={`run-mark tone-${r.state === "done" ? VERDICT[r.verdict]?.tone : r.state === "error" ? "error" : "muted"}`} aria-hidden="true" />
-                  <span className="run-file">{r.file}</span>
-                  <span className="run-meta">
-                    {r.state === "done" ? VERDICT[r.verdict]?.short : r.state === "error" ? "ошибка" : "идёт проверка"}
-                    {r.state === "done" && r.llm_used ? ", с моделью" : ""}
-                    <time>{formatTime(r.created_at)}</time>
-                  </span>
-                </button>
-              </li>
-            ))}
+            {runs.slice(0, 30).map((r) => {
+              const status = runStatus(r);
+              return (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    className={`run${r.id === currentId ? " is-current" : ""}`}
+                    onClick={() => onOpen(r.id)}
+                    aria-current={r.id === currentId ? "page" : undefined}
+                  >
+                    <span className={`run-mark tone-${status.tone}`} aria-hidden="true" />
+                    <span className="run-file">{r.file}</span>
+                    <span className="run-meta">
+                      {status.short}
+                      {r.state === "done" && r.llm_used ? ", с моделью" : ""}
+                      <time>{formatTime(r.created_at)}</time>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

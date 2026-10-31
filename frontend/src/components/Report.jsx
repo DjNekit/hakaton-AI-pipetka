@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
-import { VERDICT, plural } from "../format.js";
+import { plural, runStatus } from "../format.js";
 import Findings from "./Findings.jsx";
 import SheetViewer from "./SheetViewer.jsx";
 import FinishTable from "./FinishTable.jsx";
@@ -68,7 +68,8 @@ export default function Report({ run, useLlm, onUpdate }) {
     }
   };
 
-  const v = VERDICT[report.verdict];
+  const status = runStatus(run);
+  const decided = Boolean(run.decision && !run.archived_at);
   const s = report.summary;
   const c = report.counts;
   const passed = c.rules_ok;
@@ -76,10 +77,10 @@ export default function Report({ run, useLlm, onUpdate }) {
 
   return (
     <article className="report">
-      <div className={`stamp tone-${v.tone}`}>
+      <div className={`stamp tone-${status.tone}`}>
         <div className="stamp-verdict">
-          <span className="stamp-label">Вердикт</span>
-          <strong>{v.title}</strong>
+          <span className="stamp-label">{decided ? "Решение" : "Вердикт"}</span>
+          <strong>{status.title || status.label}</strong>
         </div>
         <dl className="stamp-grid">
           <div className="cell-wide">
