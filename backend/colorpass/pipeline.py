@@ -16,8 +16,6 @@ from . import __version__
 from .checks import Context, load_rules, run_checks
 from .extract import PAGE_KINDS, build_passport
 from .ingest import Document
-from .llm import LLMClient, LLMError, make_client
-from .llm_tasks import llm_conclusion, llm_mentions
 from .color import rgb_to_hex
 from .palettes import ncs_to_rgb, ral_lookup
 
@@ -77,8 +75,6 @@ def _annotate(img: np.ndarray, findings: list[dict], scale: float) -> np.ndarray
 def run_check(
     pdf_path: str | Path,
     out_dir: str | Path,
-    use_llm: bool = True,
-    llm: LLMClient | None = None,
     progress: Progress = _noop,
     write_images: bool = True,
 ) -> dict:
@@ -93,34 +89,15 @@ def run_check(
         from .signage import is_signage
 
         if is_signage(doc):
-            return _run_signage(doc, pdf_path, out, rules, use_llm, llm, progress, write_images, t0)
+            return _run_signage(doc, pdf_path, out, rules, progress, write_images, t0)
         progress("Разбор структуры паспорта", 0.15)
         passport = build_passport(doc)
 
-        llm_info: dict = {"requested": use_llm, "used": False, "model": None, "tasks": {}, "error": None}
-        client = None
-        mentions = None
-        if use_llm:
-            client = llm or make_client()
-            st = client.status()
-            llm_info["status"] = st
-            if st.get("available"):
-                llm_info["model"] = st.get("model")
-                llm_info["provider"] = st.get("provider", "gigachat")
-                if passport.note_text and passport.finish_rows:
-                    progress("Модель: разбор пояснительной записки", 0.3)
-                    try:
-                        mentions = llm_mentions(client, passport.note_text, passport.finish_rows)
-                        llm_info["tasks"]["note_mentions"] = "ok"
-                        llm_info["used"] = True
-                    except (LLMError, ValueError, KeyError) as exc:
-                        llm_info["tasks"]["note_mentions"] = f"ошибка: {exc}"
-                        llm_info["error"] = str(exc)
-            else:
-                llm_info["error"] = st.get("error") or "GigaChat недоступен"
+        # языковая модель — не здесь: заключение моделью и описание фото делает сервис chat (API сохраняет результат)
+        llm_info: dict = {"requested": False, "used": False, "model": None, "tasks": {}, "error": None}
 
         progress("Проверки по чек-листу", 0.5)
-        ctx = Context(doc, passport, llm_mentions=mentions)
+        ctx = Context(doc, passport)
         results = run_checks(ctx)
 
         findings = []
@@ -189,18 +166,6 @@ def run_check(
             pages_out.append(entry)
 
         conclusion = {"text": template_conclusion(summary, findings), "source": "template"}
-        if client is not None and llm_info.get("model"):
-            progress("Модель: формулировка заключения", 0.85)
-            try:
-                conclusion = {"text": llm_conclusion(client, summary, findings), "source": "llm", "template": conclusion["text"]}
-                llm_info["tasks"]["conclusion"] = "ok"
-                llm_info["used"] = True
-            except (LLMError, ValueError) as exc:
-                llm_info["tasks"]["conclusion"] = f"ошибка: {exc}"
-                llm_info["error"] = llm_info["error"] or str(exc)
-        if client is not None:
-            llm_info["calls"] = client.calls
-
         report = {
             "version": __version__,
             "document_kind": "passport",
@@ -296,7 +261,7 @@ def _findings_and_checklist(results, rules) -> tuple[list[dict], list[dict]]:
     return findings, checklist
 
 
-def _run_signage(doc, pdf_path, out: Path, rules: dict, use_llm: bool, llm, progress: Progress, write_images: bool, t0: float) -> dict:
+def _run_signage(doc, pdf_path, out: Path, rules: dict, progress: Progress, write_images: bool, t0: float) -> dict:
     """Дизайн-проект размещения вывесок (902-ПП): те же отчёт, листы и заключение, другой набор проверок."""
     from .signage import SIGN_KINDS, SignContext, build_signage, run_signage_checks
 
@@ -338,27 +303,8 @@ def _run_signage(doc, pdf_path, out: Path, rules: dict, use_llm: bool, llm, prog
                 Image.fromarray(_annotate(img, page_f, PREVIEW_SCALE)).save(out / entry["annotated"], optimize=True)
         pages_out.append(entry)
 
-    llm_info: dict = {"requested": use_llm, "used": False, "model": None, "tasks": {}, "error": None}
+    llm_info: dict = {"requested": False, "used": False, "model": None, "tasks": {}, "error": None}
     conclusion = {"text": template_conclusion(summary, findings), "source": "template"}
-    client = None
-    if use_llm:
-        client = llm or make_client()
-        st = client.status()
-        llm_info["status"] = st
-        if st.get("available"):
-            llm_info["model"] = st.get("model")
-            llm_info["provider"] = st.get("provider", "gigachat")
-            progress("Модель: формулировка заключения", 0.85)
-            try:
-                conclusion = {"text": llm_conclusion(client, summary, findings), "source": "llm", "template": conclusion["text"]}
-                llm_info["tasks"]["conclusion"] = "ok"
-                llm_info["used"] = True
-            except (LLMError, ValueError) as exc:
-                llm_info["tasks"]["conclusion"] = f"ошибка: {exc}"
-                llm_info["error"] = str(exc)
-        else:
-            llm_info["error"] = st.get("error") or "GigaChat недоступен"
-        llm_info["calls"] = client.calls
 
     report = {
         "version": __version__,

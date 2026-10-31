@@ -17,7 +17,6 @@ from pathlib import Path
 
 from . import __version__
 from .checks import load_rules
-from .llm import LLMClient, make_client
 from .store import get_store, safe
 from .pipeline import run_check, template_conclusion
 
@@ -164,7 +163,7 @@ def health() -> dict:
     if store:
         stats = safe("статус", store.stats)
         db = {"enabled": True, "ok": stats is not None, **(stats or {})}
-    return {"ok": True, "version": __version__, "llm": make_client().status(), "db": db}
+    return {"ok": True, "version": __version__, "db": db}  # статус модели — у сервиса chat: GET /chat/health
 
 
 def rules() -> dict:
@@ -222,7 +221,7 @@ def sample_pdf(name: str) -> Path:
 # ----------------------------------------------------------------- запуски
 
 
-def _worker(run_id: str, use_llm: bool) -> None:
+def _worker(run_id: str) -> None:
     run_dir = RUNS_DIR / run_id
     with _SEM:
         _write_status(run_id, state="running", stage="Запуск", progress=0.02, started_at=_now())
@@ -232,7 +231,7 @@ def _worker(run_id: str, use_llm: bool) -> None:
             _write_status(run_id, stage=stage, progress=round(frac, 3))
 
         try:
-            report = run_check(run_dir / "input.pdf", run_dir, use_llm=use_llm, progress=progress)
+            report = run_check(run_dir / "input.pdf", run_dir, progress=progress)
             _write_status(
                 run_id,
                 state="done",
@@ -251,7 +250,7 @@ def _worker(run_id: str, use_llm: bool) -> None:
             _write_status(run_id, state="error", stage="Ошибка", error=f"{type(exc).__name__}: {exc}", finished_at=_now())
 
 
-def _start(data: bytes, filename: str, use_llm: bool, sample: str | None = None) -> dict:
+def _start(data: bytes, filename: str, sample: str | None = None) -> dict:
     if not data.startswith(b"%PDF"):
         raise BadRequest("Ожидается PDF-файл")
     if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
@@ -265,23 +264,22 @@ def _start(data: bytes, filename: str, use_llm: bool, sample: str | None = None)
         id=run_id,
         file=Path(filename).name or "passport.pdf",
         sample=sample,
-        use_llm=use_llm,
         state="queued",
         stage="В очереди",
         progress=0.0,
         created_at=_now(),
     )
-    threading.Thread(target=_worker, args=(run_id, use_llm), daemon=True, name=f"check-{run_id}").start()
+    threading.Thread(target=_worker, args=(run_id,), daemon=True, name=f"check-{run_id}").start()
     return status
 
 
-def start_upload(filename: str, data: bytes, use_llm: bool = True) -> dict:
-    return _start(data, filename, use_llm)
+def start_upload(filename: str, data: bytes) -> dict:
+    return _start(data, filename)
 
 
-def start_sample(name: str, use_llm: bool = True) -> dict:
+def start_sample(name: str) -> dict:
     path = sample_pdf(name)
-    return _start(path.read_bytes(), path.name, use_llm, sample=name)
+    return _start(path.read_bytes(), path.name, sample=name)
 
 
 def _import_files_to_db(store) -> None:
@@ -563,11 +561,10 @@ def compare_photo(
     photo_block: str | None = None,
     quad=None,
     rect=None,
-    use_llm: bool = True,
 ) -> dict:
-    """Сравнивает фото с развёрткой; результат — runs/web/<id>/compare/<cid>/result.json и изображения."""
-    from .llm_tasks import llm_photo_review
-    from .photo import VERDICT_TEXT, compare, load_rgb, png_b64, save_rgb, template_conclusion
+    """Сравнивает фото с развёрткой; результат — runs/web/<id>/compare/<cid>/result.json и изображения.
+    Описание отличий моделью добавляет сервис chat через save_photo_review."""
+    from .photo import compare, load_rgb, save_rgb, template_conclusion
 
     run_dir, _ = _done_report(run_id)
     blocks = list_blocks(run_id)
@@ -609,33 +606,7 @@ def compare_photo(
     result = res.to_dict()
     llm_info = {"used": False, "model": None, "error": None}
     review = None
-    if use_llm:
-        client = make_client()
-        st = client.status()
-        if st.get("available"):
-            try:
-                review = llm_photo_review(
-                    client, [png_b64(imgs["drawing"]), png_b64(imgs["photo_warped"]), png_b64(imgs["diff_overlay"])], result
-                )
-                llm_info = {"used": True, "model": st.get("model"), "provider": st.get("provider", "gigachat"), "error": None}
-            except Exception as exc:  # noqa: BLE001 — модель без зрения, таймаут и т. п.: работаем без неё
-                log.warning("Модель не описала фото: %s", exc)
-                llm_info = {"used": False, "model": st.get("model"), "error": str(exc)[:300]}
-        else:
-            llm_info["error"] = st.get("error") or "Модель недоступна"
-
-    verdict = result["verdict"]
-    if review and verdict == "match" and (review["differences"] or not review["same_facade"]):
-        verdict = "attention"  # модель видит то, что код по цвету не нашёл — пусть посмотрит инспектор
-    result["verdict"] = verdict
-    text = template_conclusion(res, facade["label"]).replace(
-        VERDICT_TEXT[res.verdict].lower(), VERDICT_TEXT[verdict].lower(), 1
-    )
-    if review:
-        if not review["same_facade"]:
-            text += "\nМодель сомневается, что на фото тот же фасад, — проверьте выбор развёртки и углы."
-        if review["summary"]:
-            text += "\n\nОписание модели: " + review["summary"]
+    text = template_conclusion(res, facade["label"])
     payload = {
         "id": cid,
         "run_id": run_id,
@@ -649,9 +620,91 @@ def compare_photo(
         "review": review,
         "llm": llm_info,
         "conclusion": text,
+        "template_conclusion": text,
+        "code_verdict": result["verdict"],
         "images": {k: f"compare/{cid}/{k}.png" for k in imgs},
     }
     (out / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    store = get_store()
+    if store:
+        safe("запись сравнения", lambda: store.save_comparison(payload))
+    return payload
+
+
+# ---------------------------------------------------------------- результаты модели от сервиса chat
+# Бэкенд сам к языковой модели не обращается. Сервис chat формулирует заключение и описывает фото,
+# а сюда присылает готовый текст — бэкенд проверяет и сохраняет его рядом с результатами правил.
+
+
+def save_conclusion(run_id: str, text: str, model: str = "", provider: str = "") -> dict:
+    """Заключение, сформулированное моделью по результатам проверки. Вердикт и замечания не меняются."""
+    text = (text or "").strip()
+    if not text:
+        raise BadRequest("Пустой текст заключения")
+    with _EDIT_LOCK:
+        run_dir, report = _done_report(run_id)
+        prev = report.get("conclusion") or {}
+        template = prev.get("template") or (prev.get("text") if prev.get("source") != "llm" else None)
+        report["conclusion"] = {"text": text[:6000], "source": "llm", "template": template, "created_at": _now()}
+        llm = report.setdefault("llm", {})
+        llm.update({"requested": True, "used": True, "model": model or None, "provider": provider or None, "error": None})
+        llm.setdefault("tasks", {})["conclusion"] = "ok"
+        (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "conclusion.md").write_text(report["conclusion"]["text"], encoding="utf-8")
+        _write_status(run_id, report=report, llm_used=True, edited_at=_now())
+        return get_run(run_id)
+
+
+PHOTO_CATEGORIES = ["цвет", "вывеска или реклама", "окна и двери", "навесное оборудование", "архитектурные элементы", "другое"]
+
+
+def _clean_review(raw: dict) -> dict:
+    if not isinstance(raw, dict):
+        raise BadRequest("review: ожидается объект")
+    diffs = []
+    for d in (raw.get("differences") or [])[:12]:
+        if not isinstance(d, dict):
+            continue
+        desc = str(d.get("description", "")).strip()[:300]
+        if desc:
+            cat = d.get("category") if d.get("category") in PHOTO_CATEGORIES else "другое"
+            diffs.append({"category": cat, "description": desc, "where": str(d.get("where", "")).strip()[:120]})
+    return {"same_facade": bool(raw.get("same_facade", True)), "differences": diffs, "summary": str(raw.get("summary", "")).strip()[:1200]}
+
+
+def save_photo_review(run_id: str, cid: str, review: dict | None, model: str = "", provider: str = "", error: str = "") -> dict:
+    """Описание отличий на фото от модели (через chat). Вердикт считает код: модель может только поднять
+    «совпадает» до «требует внимания», если видит отличия, которых нет в цвете."""
+    from .photo import VERDICT_TEXT
+
+    if not _valid_id(run_id) or not re.fullmatch(r"[0-9a-f]{12}", cid or ""):
+        raise NotFound(cid)
+    path = (RUNS_DIR / run_id / "compare" / cid / "result.json")
+    if not path.exists():
+        raise NotFound(cid)
+    with _EDIT_LOCK:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        result = payload["result"]
+        code_verdict = payload.get("code_verdict") or result["verdict"]
+        text = payload.get("template_conclusion") or payload.get("conclusion") or ""
+        if review is None:  # модель не ответила: прежнее описание, если было, остаётся
+            if not payload.get("review"):
+                payload["llm"] = {"used": False, "model": model or None, "provider": provider or None, "error": None}
+            payload["llm"]["error"] = (error or "Модель не ответила")[:300]
+        else:
+            review = _clean_review(review)
+            verdict = code_verdict
+            if verdict == "match" and (review["differences"] or not review["same_facade"]):
+                verdict = "attention"  # модель видит то, что код по цвету не нашёл — пусть посмотрит инспектор
+            if verdict != code_verdict:
+                text = text.replace(VERDICT_TEXT[code_verdict].lower(), VERDICT_TEXT[verdict].lower(), 1)
+            if not review["same_facade"]:
+                text += "\nМодель сомневается, что на фото тот же фасад, — проверьте выбор развёртки и углы."
+            if review["summary"]:
+                text += "\n\nОписание модели: " + review["summary"]
+            result["verdict"] = verdict
+            payload.update(review=review, conclusion=text, llm={"used": True, "model": model or None, "provider": provider or None, "error": None})
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     store = get_store()
     if store:
         safe("запись сравнения", lambda: store.save_comparison(payload))

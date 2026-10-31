@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import mimetypes
 from io import BytesIO
 
@@ -32,12 +33,6 @@ def api_view(methods: list[str]):
     return deco
 
 
-def _flag(request, name: str, default: bool = True) -> bool:
-    value = request.GET.get(name, request.POST.get(name))
-    if value is None:
-        return default
-    return value.strip().lower() in ("1", "true", "yes", "on")
-
 
 @api_view(["GET"])
 def health(request):
@@ -61,7 +56,7 @@ def sample_pdf(request, name: str):
 
 @api_view(["POST"])
 def sample_check(request, name: str):
-    return JsonResponse(service.start_sample(name, use_llm=_flag(request, "llm")), status=202, **_JSON)
+    return JsonResponse(service.start_sample(name), status=202, **_JSON)
 
 
 @api_view(["GET", "POST"])
@@ -70,7 +65,7 @@ def checks(request):
         upload = request.FILES.get("file")
         if upload is None:
             raise service.BadRequest("Не передан файл (поле формы «file»)")
-        status = service.start_upload(upload.name, upload.read(), use_llm=_flag(request, "llm"))
+        status = service.start_upload(upload.name, upload.read())
         return JsonResponse(status, status=202, **_JSON)
     return JsonResponse({"checks": service.list_runs()}, **_JSON)
 
@@ -106,10 +101,40 @@ def check_comparisons(request, run_id: str):
             photo_block=request.POST.get("photo_block"),
             quad=request.POST.get("quad"),
             rect=request.POST.get("rect"),
-            use_llm=_flag(request, "llm"),
         )
         return JsonResponse(result, status=201, **_JSON)
     return JsonResponse({"comparisons": service.list_comparisons(run_id)}, **_JSON)
+
+
+def _json_body(request) -> dict:
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise service.BadRequest("Ожидается JSON") from exc
+    if not isinstance(data, dict):
+        raise service.BadRequest("Ожидается JSON-объект")
+    return data
+
+
+@api_view(["POST"])
+def check_conclusion(request, run_id: str):
+    """Заключение от модели — его присылает сервис chat."""
+    data = _json_body(request)
+    return JsonResponse(
+        service.save_conclusion(run_id, data.get("text", ""), data.get("model", ""), data.get("provider", "")), **_JSON
+    )
+
+
+@api_view(["POST"])
+def comparison_review(request, run_id: str, cid: str):
+    """Описание отличий на фото от модели — его присылает сервис chat."""
+    data = _json_body(request)
+    return JsonResponse(
+        service.save_photo_review(
+            run_id, cid, data.get("review"), data.get("model", ""), data.get("provider", ""), data.get("error", "")
+        ),
+        **_JSON,
+    )
 
 
 @api_view(["GET"])

@@ -12,6 +12,8 @@ urlpatterns = [
     path("checks/<str:run_id>", views.check_detail),
     path("checks/<str:run_id>/blocks", views.check_blocks),
     path("checks/<str:run_id>/comparisons", views.check_comparisons),
+    path("checks/<str:run_id>/comparisons/<str:cid>/review", views.comparison_review),
+    path("checks/<str:run_id>/conclusion", views.check_conclusion),
     path("checks/<str:run_id>/corners", views.check_corners),
     path("checks/<str:run_id>/files/<path:relpath>", views.check_file),
     path("checks/<str:run_id>/export.xlsx", views.check_export),

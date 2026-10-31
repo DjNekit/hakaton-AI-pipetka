@@ -10,10 +10,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
        libglib2.0-0t64 \
        ca-certificates \
     && rm -rf /var/lib/apt/lists/* || true
-# Сертификаты НУЦ Минцифры — без них не проверить TLS-сертификат GigaChat API. Если gu-st.ru недоступен при сборке,
-# образ всё равно собирается; тогда задайте GIGACHAT_VERIFY_SSL=0 (только для отладки) или GIGACHAT_CA_BUNDLE.
-RUN python -c "import urllib.request as u; [open(f'/usr/local/share/ca-certificates/{n}.crt', 'wb').write(u.urlopen(f'https://gu-st.ru/content/lending/{n}.crt', timeout=30).read()) for n in ('russian_trusted_root_ca_pem', 'russian_trusted_sub_ca_pem')]" \
- && update-ca-certificates || echo "Сертификаты НУЦ Минцифры не установлены"
+# Языковых моделей здесь нет: заключение моделью, описание фото и чат — сервис chat.
 # Раскладка как в репозитории: /app/backend, /app/dataset и /app/runs монтируются из compose.yml
 WORKDIR /app/backend
 COPY requirements.txt .

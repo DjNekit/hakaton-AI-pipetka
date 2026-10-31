@@ -13,7 +13,6 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from .llm import LLMClient, make_client
 from .pipeline import run_check
 
 
@@ -52,9 +51,8 @@ def match(report: dict, expected: dict) -> dict:
     return {"defects": per_defect, "false_positives": [{"rule": f["rule"], "message": f["message"]} for f in false_pos]}
 
 
-def evaluate(dataset_dir: str | Path, out_dir: str | Path, use_llm: bool = False, verbose: bool = True) -> dict:
+def evaluate(dataset_dir: str | Path, out_dir: str | Path, verbose: bool = True) -> dict:
     dataset_dir, out_dir = Path(dataset_dir), Path(out_dir)
-    client = make_client() if use_llm else None
     rows = []
     per_rule = defaultdict(lambda: {"expected": 0, "found": 0})
     tp = fn = fp = 0
@@ -64,7 +62,7 @@ def evaluate(dataset_dir: str | Path, out_dir: str | Path, use_llm: bool = False
         expected = json.loads(exp_path.read_text(encoding="utf-8"))
         pdf = dataset_dir / expected["file"]
         t0 = time.time()
-        report = run_check(pdf, out_dir / expected["sample"], use_llm=use_llm, llm=client, write_images=False)
+        report = run_check(pdf, out_dir / expected["sample"], write_images=False)
         m = match(report, expected)
         found = sum(d["found"] for d in m["defects"])
         tp += found
@@ -105,7 +103,6 @@ def evaluate(dataset_dir: str | Path, out_dir: str | Path, use_llm: bool = False
         "precision": round(precision, 3),
         "false_positives": fp,
         "clean_pass": f"{clean_pass}/{clean_total}",
-        "llm": use_llm,
         "seconds_total": round(time.time() - t_all, 1),
         "per_rule": {k: v for k, v in sorted(per_rule.items())},
     }
@@ -116,7 +113,7 @@ def evaluate(dataset_dir: str | Path, out_dir: str | Path, use_llm: bool = False
         print(f"Заложенных ошибок: {tp + fn}, найдено: {tp}  →  recall = {recall:.1%}")
         print(f"Ложных замечаний: {fp}  →  precision = {precision:.1%}")
         print(f"Эталоны без ошибок прошли проверку: {clean_pass}/{clean_total}")
-        print(f"Время: {summary['seconds_total']} с на {len(rows)} паспортов (ЛЛМ: {'да' if use_llm else 'нет'})")
+        print(f"Время: {summary['seconds_total']} с на {len(rows)} паспортов")
     return summary
 
 

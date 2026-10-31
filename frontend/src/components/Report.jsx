@@ -21,7 +21,7 @@ const TABS = [
   ["photo", "Сравнение с фото"],
 ];
 
-export default function Report({ run, useLlm, onUpdate }) {
+export default function Report({ run, modelOn, onUpdate }) {
   const report = run.report;
   const signage = report.document_kind === "signage";
   const tabs = TABS.filter(([key]) => (signage ? key !== "table" : key !== "explication"));
@@ -195,8 +195,8 @@ export default function Report({ run, useLlm, onUpdate }) {
       {tab === "table" && <FinishTable report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "explication" && <Explication report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "checklist" && <Checklist report={report} onSelect={(f) => { select(f); setTab("findings"); }} />}
-      {tab === "conclusion" && <Conclusion run={run} onUpdate={onUpdate} />}
-      {tab === "photo" && <PhotoCompare run={run} useLlm={useLlm} />}
+      {tab === "conclusion" && <Conclusion run={run} modelOn={modelOn} onUpdate={onUpdate} />}
+      {tab === "photo" && <PhotoCompare run={run} modelOn={modelOn} />}
       {chatOpen && (
         <ChatPanel
           key={run.id}

@@ -11,15 +11,13 @@ function readHash() {
 }
 
 export default function App() {
-  const [health, setHealth] = useState(null);
+  const [health, setHealth] = useState(undefined); // undefined — ещё не знаем, null — сервис chat не отвечает
   const [samples, setSamples] = useState([]);
   const [runs, setRuns] = useState([]);
   const [rules, setRules] = useState(null);
   const [currentId, setCurrentId] = useState(readHash());
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
-  // языковая модель используется всегда, когда доступна; иначе сервис сам работает по правилам
-  const useLlm = true;
 
   const refreshRuns = useCallback(() => api.checks().then(setRuns).catch(() => {}), []);
 
@@ -35,7 +33,7 @@ export default function App() {
     api.samples().then(setSamples).catch((e) => setError(`Бэкенд недоступен: ${e.message}`));
     api.rules().then(setRules).catch(() => {});
     refreshRuns();
-    const loadHealth = () => api.health().then(setHealth).catch(() => setHealth(null));
+    const loadHealth = () => api.modelHealth().then(setHealth).catch(() => setHealth(null));
     loadHealth();
     const t = setInterval(loadHealth, 20000);
     const onHash = () => setCurrentId(readHash());
@@ -111,7 +109,7 @@ export default function App() {
         <Sidebar
           runs={runs}
           currentId={currentId}
-          onUpload={(file) => start(api.upload(file, useLlm))}
+          onUpload={(file) => start(api.upload(file))}
           onOpen={open}
         />
         <main className="main" id="main">
@@ -120,23 +118,24 @@ export default function App() {
               {error}
             </div>
           )}
-          {!currentId && <EmptyState rules={rules} samples={samples} onSample={(n) => start(api.checkSample(n, useLlm))} />}
+          {!currentId && <EmptyState rules={rules} samples={samples} onSample={(n) => start(api.checkSample(n))} />}
           {currentId && run && (run.state === "queued" || run.state === "running") && <Progress run={run} />}
           {currentId && run && run.state === "error" && (
             <div className="banner banner-error" role="alert">
               Проверка «{run.file}» не выполнена: {run.error}. Проверьте, что файл — паспорт в формате PDF, и запустите проверку ещё раз.
             </div>
           )}
-          {currentId && run && run.state === "done" && run.report && <Report run={run} useLlm={useLlm} onUpdate={updateRun} />}
+          {currentId && run && run.state === "done" && run.report && <Report run={run} modelOn={Boolean(health && health.available)} onUpdate={updateRun} />}
         </main>
       </div>
     </div>
   );
 }
 
-function LlmStatus({ health }) {
-  if (!health) return <span className="llm-status llm-off">Сервер проверки не отвечает</span>;
-  const llm = health.llm || {};
+// Статус языковой модели — от сервиса chat. Проверка по правилам работает и без модели.
+function LlmStatus({ health: llm }) {
+  if (llm === undefined) return null;
+  if (!llm) return <span className="llm-status llm-off">Сервис ИИ не отвечает — проверка по правилам</span>;
   if (!llm.available)
     return (
       <span className="llm-status llm-off" title={llm.error || ""}>
@@ -147,7 +146,7 @@ function LlmStatus({ health }) {
   return (
     <span
       className="llm-status llm-on"
-      title={local ? "Локальная Gemma в LM Studio (через ngrok); если она отключится — GigaChat API" : "GigaChat API"}
+      title={local ? "Локальная модель в LM Studio; если она отключится — GigaChat API" : "GigaChat API (LM Studio недоступна)"}
     >
       <span className="dot" aria-hidden="true" /> {local ? "Локальная модель" : "GigaChat"}: {llm.model}
     </span>

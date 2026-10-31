@@ -20,17 +20,19 @@ services:
       backend: { condition: service_healthy }
       chat: { condition: service_started }
 
-  chat:                             # чат по отчёту (TanStack AI): данные — из backend, модель — та же LM Studio через ngrok
+  chat:                             # языковые модели (TanStack AI): чат, заключение, описание фото; данные — из backend
     build: ./chat
     restart: always
     environment:
       BACKEND_URL: http://backend:8000
-      # модель — та же, что у бэкенда (LM Studio); отдельная — CHAT_LLM_URL / CHAT_LLM_MODEL
+      # основная модель — LM Studio на ноутбуке через ngrok; не отвечает — GigaChat API; нет обеих — ИИ-функции недоступны, правила работают
       LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
       LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-      CHAT_LLM_URL: ${CHAT_LLM_URL:-}
-      CHAT_LLM_MODEL: ${CHAT_LLM_MODEL:-}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
+      LLM_TIMEOUT: "300"
     depends_on:
       backend: { condition: service_healthy }
 
@@ -38,20 +40,10 @@ services:
     build: ./backend                # gunicorn
     restart: always
     environment:
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
-      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
-      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
-      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
       DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}@db:5432/colorpass
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?задайте DJANGO_SECRET_KEY}
       DJANGO_DEBUG: "0"
       DJANGO_ALLOWED_HOSTS: "*"     # снаружи только Caddy → backend
-      # основная модель — Gemma 4 в LM Studio на ноутбуке, открыта через ngrok (README → «Модели»);
-      # ноутбук выключен или туннель закрыт — GigaChat API
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-      LLM_TIMEOUT: "300"
       COLORPASS_WORKERS: "2"
       COLORPASS_MAX_UPLOAD_MB: "100"
     volumes:

@@ -28,12 +28,6 @@ from colorpass import service  # noqa: E402
 FRONTEND_DIST = Path(os.getenv("COLORPASS_FRONTEND_DIST", Path(__file__).resolve().parents[1] / "frontend" / "dist"))
 
 
-def _flag(query: dict, form: dict, name: str, default: bool = True) -> bool:
-    value = (query.get(name) or [None])[0] or form.get(name)
-    if value is None:
-        return default
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
 
 def _multipart(content_type: str, body: bytes) -> tuple[dict, dict]:
     msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
@@ -95,6 +89,11 @@ class Handler(BaseHTTPRequestHandler):
             ctype = self.headers.get("Content-Type", "")
             if ctype.startswith("multipart/form-data"):
                 form, files = _multipart(ctype, body)
+            elif ctype.startswith("application/json") and body:
+                try:
+                    form = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    return self._json({"error": "bad_request", "detail": "Ожидается JSON"}, 400)
         try:
             if path == "/api/health" and method == "GET":
                 return self._json(service.health())
@@ -107,13 +106,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(service.sample_pdf(m.group(1)), "application/pdf")
             m = re.fullmatch(r"/api/samples/([\w\-]+)/check", path)
             if m and method == "POST":
-                return self._json(service.start_sample(m.group(1), use_llm=_flag(query, form, "llm")), 202)
+                return self._json(service.start_sample(m.group(1)), 202)
             if path == "/api/checks":
                 if method == "POST":
                     if "file" not in files:
                         raise service.BadRequest("Не передан файл (поле формы «file»)")
                     name, data = files["file"]
-                    return self._json(service.start_upload(name, data, use_llm=_flag(query, form, "llm")), 202)
+                    return self._json(service.start_upload(name, data), 202)
                 return self._json({"checks": service.list_runs()})
             m = re.fullmatch(r"/api/checks/([0-9a-f]{12})", path)
             if m and method == "GET":
@@ -133,11 +132,18 @@ class Handler(BaseHTTPRequestHandler):
                         service.compare_photo(
                             m.group(1), form.get("facade", ""), photo_bytes=data or None, photo_name=name,
                             photo_block=form.get("photo_block"), quad=form.get("quad"), rect=form.get("rect"),
-                            use_llm=_flag(query, form, "llm"),
                         ),
                         201,
                     )
                 return self._json({"comparisons": service.list_comparisons(m.group(1))})
+            m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/conclusion", path)
+            if m and method == "POST":
+                return self._json(service.save_conclusion(m.group(1), form.get("text", ""), form.get("model", ""), form.get("provider", "")))
+            m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/comparisons/([0-9a-f]{12})/review", path)
+            if m and method == "POST":
+                return self._json(service.save_photo_review(
+                    m.group(1), m.group(2), form.get("review"), form.get("model", ""), form.get("provider", ""), form.get("error", "")
+                ))
             m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/change_status", path)
             if m and method == "POST":
                 return self._json(

@@ -2,11 +2,26 @@ import { useState } from "react";
 import { api } from "../api.js";
 import { DECISION, formatDate } from "../format.js";
 
-export default function Conclusion({ run, onUpdate }) {
+export default function Conclusion({ run, modelOn, onUpdate }) {
   const { conclusion, llm } = run.report;
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [writing, setWriting] = useState(false);
+  const [writeError, setWriteError] = useState(null);
+
+  // заключение моделью — через сервис chat: он формулирует текст по результатам проверки и сохраняет его в бэкенд
+  const writeWithModel = async () => {
+    setWriting(true);
+    setWriteError(null);
+    try {
+      onUpdate(await api.writeConclusion(run.id));
+    } catch (e) {
+      setWriteError(e.message);
+    } finally {
+      setWriting(false);
+    }
+  };
   const reference = run.expected && run.expected.reference_conclusion;
   const decision = run.decision && DECISION[run.decision];
   const archived = Boolean(run.archived_at);
@@ -59,7 +74,10 @@ export default function Conclusion({ run, onUpdate }) {
           <a className="btn" href={api.exportExcelUrl(run.id)}>
             Скачать Excel
           </a>
-          {llm.requested && !llm.used && llm.error && <span className="muted">Модель не использована: {llm.error}</span>}
+          <button type="button" className="btn" onClick={writeWithModel} disabled={writing || !modelOn} title={modelOn ? "" : "Языковая модель недоступна"}>
+            {writing ? "Модель пишет заключение…" : conclusion.source === "llm" ? "Переформулировать моделью" : "Сформулировать моделью"}
+          </button>
+          {writeError && <span className="muted">Модель не ответила: {writeError}</span>}
         </footer>
       </section>
 

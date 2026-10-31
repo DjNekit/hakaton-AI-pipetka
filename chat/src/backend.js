@@ -1,4 +1,4 @@
-// Обращения к основному бэкенду (Django API). Чат ничего не считает сам: все данные — отсюда.
+// Обращения к основному бэкенду (Django API): чат берёт отсюда данные и сюда сохраняет ответы модели.
 import { config } from "./config.js";
 
 export class BackendError extends Error {
@@ -8,19 +8,32 @@ export class BackendError extends Error {
   }
 }
 
-async function get(path) {
-  const res = await fetch(`${config.backendUrl}/api${path}`, { signal: AbortSignal.timeout(15000) });
+async function call(path, init = {}) {
+  const res = await fetch(`${config.backendUrl}/api${path}`, { ...init, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new BackendError(`Бэкенд: HTTP ${res.status} на ${path} ${text.slice(0, 200)}`, res.status);
+    let detail = text.slice(0, 300);
+    try {
+      detail = JSON.parse(text).detail || detail;
+    } catch {}
+    throw new BackendError(`Бэкенд: HTTP ${res.status} на ${path}: ${detail}`, res.status);
   }
-  return res.json();
+  return res;
 }
 
+const get = async (path) => (await call(path)).json();
+const post = async (path, body) =>
+  (await call(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+const id = encodeURIComponent;
+
 export const backend = {
-  check: (id) => get(`/checks/${encodeURIComponent(id)}`),
-  comparisons: (id) => get(`/checks/${encodeURIComponent(id)}/comparisons`),
+  check: (checkId) => get(`/checks/${id(checkId)}`),
+  comparisons: (checkId) => get(`/checks/${id(checkId)}/comparisons`),
   rules: () => get("/rules"),
+  /** Файл проверки (картинка листа, сравнения) — в base64 для модели. */
+  fileBase64: async (checkId, rel) => Buffer.from(await (await call(`/checks/${id(checkId)}/files/${rel}`)).arrayBuffer()).toString("base64"),
+  saveConclusion: (checkId, body) => post(`/checks/${id(checkId)}/conclusion`, body),
+  saveReview: (checkId, cid, body) => post(`/checks/${id(checkId)}/comparisons/${id(cid)}/review`, body),
 };
 
 // Справочник правил меняется только с кодом — кэшируем на время жизни процесса.

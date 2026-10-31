@@ -28,16 +28,17 @@ MVP для хакатона «Архитектура цифрового горо
 **Сравнение фото с графической частью** (вкладка «Сравнение с фото»): развёртка, чертёж или фотомонтаж из документа
 против своего фото или фото из фотофиксации. Углы фасада на фото можно найти автоматически (по линиям фасада)
 и поправить мышью. Программа выравнивает фото, сравнивает цвет каждой зоны по ΔE00 с поправкой на экспозицию,
-строит карту отличий и выносит вердикт. Мультимодальная модель описывает отличия словами (вывески, кондиционеры,
-проёмы), но вердикт не меняет.
+строит карту отличий и выносит вердикт. Мультимодальная модель (сервис `chat`) описывает отличия словами
+(вывески, кондиционеры, проёмы); вердикт считает код — модель может только поднять «совпадает» до «требует внимания».
 
 ![Сравнение фото с развёрткой: карта отличий, цвета зон, вывод](docs/screenshot-photo.png)
 
-**Языковые модели**: основная — **Gemma 4** в LM Studio на ноутбуке разработчика (понимает текст и фото, прод
-обращается к ней через ngrok), запасная — **GigaChat API** (облако Сбера). Модель разбирает пояснительную записку,
-пишет заключение и описание отличий на фото. Модель — помощник, а не судья: все решения «соответствует / нет»
-принимает код по `rules.yaml`, ответы модели сверяются с исходным текстом. Нет ни одной модели — всё работает
-на правилах.
+**Языковые модели — только в сервисе `chat`**: основная — модель в LM Studio на ноутбуке разработчика (прод
+обращается к ней через ngrok), запасная — **GigaChat API** (облако Сбера). Бэкенд к моделям не обращается: проверка
+документа, разбор пояснительной записки и сравнение фото — правила и код. Сервис `chat` отвечает на вопросы
+по отчёту, по кнопке формулирует заключение и описывает отличия на фото, а результат сохраняет в бэкенд через его
+API. Модель — помощник, а не судья: решения «соответствует / нет» принимает код по `rules.yaml`. Нет ни одной
+модели — всё, кроме чата и текстов модели, работает.
 
 **Отчёт**: штамп-вердикт, каждое замечание выделено на листе, колеры «заявлено / фактически» с ΔE, таблица отделки
 или экспликация вывесок, чек-лист со ссылками на НПА, заключение (копировать / скачать .md). История проверок
@@ -55,7 +56,7 @@ MVP для хакатона «Архитектура цифрового горо
 ### Локально
 
 ```bash
-cp .env.example .env                          # один раз; в .env — ключ GigaChat API
+cp .env.example .env                          # один раз; в .env — адрес LM Studio и ключ GigaChat API
 docker compose up --build                     # интерфейс → http://localhost:5173, API → http://localhost:8000/api/health
 docker compose down                           # остановить (данные базы остаются в томе pgdata)
 ```
@@ -63,7 +64,7 @@ docker compose down                           # остановить (данны
 | Сервис | Что внутри | Порт |
 |---|---|---|
 | `frontend` | Vite dev server, `/api` проксируется на backend, `/chat` — на chat | 5173 (`COLORPASS_PORT`) |
-| `chat` | чат по отчёту: Node + TanStack AI, данные из backend, модель — LM Studio | 127.0.0.1:3000 |
+| `chat` | языковые модели: Node + TanStack AI; чат, заключение, описание фото; LM Studio, запасной GigaChat | 127.0.0.1:3000 |
 | `backend` | Django `runserver` + ядро проверки, tesseract, сертификаты НУЦ Минцифры | 127.0.0.1:8000 |
 | `db` | PostgreSQL 16: проверки, замечания, сравнения фото | 127.0.0.1:5432 (`COLORPASS_DB_PORT`) |
 
@@ -81,70 +82,62 @@ Docker на сервере ставится при первом деплое, е
 На сервере вручную: `cd /opt/colorpass && docker compose -f compose.prod.yml logs -f` (логи),
 `docker compose -f compose.prod.yml ps` (состояние).
 
-### GigaChat API
+### Языковые модели (сервис `chat`)
 
-В `.env`: `GIGACHAT_AUTH_KEY=<ключ авторизации>`, при необходимости `GIGACHAT_MODEL` (по умолчанию `GigaChat-2-Max`,
-понимает изображения) и `GIGACHAT_SCOPE` (`GIGACHAT_API_PERS` для физлиц, `GIGACHAT_API_B2B` / `GIGACHAT_API_CORP`).
-Ключ — Base64 от «Client ID:Client Secret» из личного кабинета developers.sber.ru; храните его только в `.env`
-(файл не попадает в git и в образы). Токен (30 мин) сервис получает и обновляет сам, изображения передаёт через
-загрузку файлов GigaChat. Сертификат НУЦ Минцифры ставится в образ при сборке; если сборка без доступа
-к gu-st.ru — `GIGACHAT_VERIFY_SSL=0` (только для отладки). Статус модели — в правом верхнем углу интерфейса.
+Всё, что связано с моделями, — в сервисе `chat/` (Node 22, Hono, [TanStack AI](https://tanstack.com/ai)). Бэкенд
+работает только по правилам; данные проверок `chat` берёт из него по HTTP (`BACKEND_URL`) и туда же сохраняет ответы
+модели (`POST /api/checks/{id}/conclusion`, `POST /api/checks/{id}/comparisons/{cid}/review`).
 
-### Gemma 4 в LM Studio через ngrok (основная модель)
+Порядок выбора модели при каждом запросе: LM Studio (если задан `LOCAL_LLM_URL` и она отвечает) → GigaChat API →
+модель недоступна. Если LM Studio отвалилась посреди задачи, запрос повторяется в GigaChat. Какая модель работает
+сейчас — в правом верхнем углу: «Локальная модель: …» или «GigaChat: …».
 
-Порядок выбора модели при каждой проверке: Gemma в LM Studio (если задан `LOCAL_LLM_URL` и она отвечает) →
-GigaChat API → только правила. Если Gemma отвалилась посреди проверки, запрос повторяется в GigaChat. Какая модель
-работает сейчас — в правом верхнем углу: «Локальная модель: …» или «GigaChat: …».
+Что делает модель:
+- **Чат по отчёту** — кнопка «Спросить ИИ». Инспектор спрашивает «почему TAB-02 — ошибка?», «что исправить
+  заявителю?», модель отвечает по данным этой проверки и сама показывает замечание на листе. Серверные
+  инструменты читают проверку из бэкенда (документ, замечания, чек-лист, правила, таблица отделки или экспликация,
+  сравнения с фото — `chat/src/tools.js`), клиентские выполняет браузер: `show_finding`, `show_page`, `open_tab`
+  (`frontend/src/chat/tools.js`, хук `useChat` из `@tanstack/ai-react` — `components/ChatPanel.jsx`).
+  У GigaChat свой формат вызова функций, поэтому на запасной модели чат работает без инструментов: данные
+  проверки передаются в промпте.
+- **Заключение** — кнопка «Сформулировать моделью» на вкладке «Заключение». По умолчанию заключение составляется
+  по шаблону; исключили замечание — заключение снова пересчитывается по шаблону.
+- **Описание отличий на фото** — сразу после сравнения (и кнопкой «описать моделью»).
 
-**Локально** (`compose.yml`) достаточно запустить сервер LM Studio на этом же компьютере (порт 1234) — backend найдёт
-его сам по `http://host.docker.internal:1234/v1`.
+**LM Studio локально** (`compose.yml`): запустите сервер LM Studio на этом же компьютере (порт 1234) — `chat` найдёт
+его сам по `http://host.docker.internal:1234/v1`. Модель должна понимать изображения и вызывать инструменты:
+**Qwen3-VL 8B Instruct** (MLX 4-bit на Mac) подходит.
 
-**Для прода** модель запускает один человек на своём ноутбуке, остальные пользуются ею через сайт.
+**LM Studio для прода** — модель запускает один человек на своём ноутбуке, остальные пользуются ею через сайт:
 
-1. LM Studio 0.4 или новее → скачать **Gemma 4 12B** (Q4, ~8 ГБ; для Mac с 24 ГБ — оптимально; есть память —
-   26B A4B). Developer → Start Server (порт 1234).
+1. LM Studio 0.4 или новее → скачать модель → Developer → Start Server (порт 1234).
 2. Токен LM Studio не обязателен. Без него любой, кто узнает адрес ngrok, сможет пользоваться моделью; если нужно
    закрыть — Server Settings → Require Authentication → Create Token и секрет `LOCAL_LLM_KEY`.
 3. ngrok: зарегистрироваться на ngrok.com, `ngrok config add-authtoken <токен ngrok>`, в Dashboard → Domains взять
    бесплатный постоянный домен и держать открытым:
    ```bash
-   ngrok http 1234 --url=https://<домен>.ngrok-free.app
+   ngrok http 1234 --url=https://<домен>.ngrok-free.dev
    ```
-4. Проверка с любого компьютера:
-   ```bash
-   curl https://<домен>.ngrok-free.app/v1/models
-   ```
-5. В GitHub, окружение `production`: секрет `LOCAL_LLM_URL=https://<домен>.ngrok-free.app/v1`, переменная `LOCAL_LLM_MODEL=<идентификатор Gemma из LM Studio>`
-   (например `google/gemma-4-12b`) → перезапустить деплой (Actions → deploy → Run workflow).
+4. Проверка с любого компьютера: `curl https://<домен>.ngrok-free.dev/v1/models`.
+5. В GitHub, окружение `production`: секрет `LOCAL_LLM_URL=https://<домен>.ngrok-free.dev/v1`, переменная
+   `LOCAL_LLM_MODEL=<id модели из /v1/models>` → перезапустить деплой (Actions → deploy → Run workflow).
 
-Закрыли ngrok или LM Studio, уснул ноутбук — следующая проверка на проде пойдёт в GigaChat, перезапуск не нужен.
-Домен постоянный, поэтому секрет задаётся один раз.
+Закрыли ngrok или LM Studio, уснул ноутбук — следующий запрос пойдёт в GigaChat, перезапуск не нужен.
 
-### Чат по отчёту (сервис `chat`)
-
-Кнопка «Спросить ИИ» в отчёте открывает чат: инспектор спрашивает «почему TAB-02 — ошибка?», «что исправить
-заявителю?», а модель отвечает по данным этой проверки и сама показывает замечание на листе.
-
-- Отдельный сервис `chat/` на [TanStack AI](https://tanstack.com/ai): Node 22, Hono, без сборки.
-  На фронтенде — хук `useChat` из `@tanstack/ai-react` (`frontend/src/components/ChatPanel.jsx`).
-- Данные сервис берёт из основного бэкенда по HTTP (`BACKEND_URL`) — только чтение: сведения о документе,
-  замечания, чек-лист, правила, таблица отделки или экспликация, сравнения с фото (`chat/src/tools.js`).
-- Клиентские инструменты выполняет браузер: `show_finding`, `show_page`, `open_tab` (`frontend/src/chat/tools.js`).
-- Модель — та же LM Studio, что у бэкенда (`LOCAL_LLM_URL`, `LOCAL_LLM_MODEL`); отдельная —
-  `CHAT_LLM_URL`, `CHAT_LLM_MODEL`. Модель должна уметь вызывать инструменты (Qwen3-VL, Gemma 4 — умеют).
-  Запасного GigaChat у чата нет: LM Studio выключена — чат пишет, что модель недоступна, остальное работает.
-- Вердикт и замечания чат не меняет — только объясняет. Исключить замечание может инспектор кнопкой в списке.
-- В проде Caddy отдаёт `/chat/*` сервису `chat` потоком (SSE).
+**GigaChat API** (запасная): в `.env` — `GIGACHAT_AUTH_KEY=<ключ авторизации>` (Base64 от «Client ID:Client Secret»
+из личного кабинета developers.sber.ru), при необходимости `GIGACHAT_MODEL` (по умолчанию `GigaChat-2-Max`, понимает
+изображения) и `GIGACHAT_SCOPE`. Ключ храните только в `.env`. Токен (30 мин) сервис получает и обновляет сам,
+изображения передаёт через загрузку файлов GigaChat. Сертификаты НУЦ Минцифры ставятся в образ `chat` при сборке
+(`NODE_EXTRA_CA_CERTS`).
 
 ### Команды внутри контейнера
 
 | Команда | Что делает |
 |---|---|
-| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real`; `--llm` — с моделью |
+| `docker compose exec backend python -m colorpass eval` | метрики на размеченных паспортах `dataset/real` |
 | `docker compose exec backend python -m colorpass eval ../dataset/signs` | метрики на образцах дизайн-проектов вывесок |
 | `docker compose exec backend python -m colorpass eval-photos` | точность сравнения фото по разметке `*.photos.json` |
 | `docker compose exec backend python -m colorpass check ../dataset/real/<файл>.pdf` | проверка одного файла, отчёт в `runs/` |
-| `docker compose exec backend python -m colorpass llm-status` | какая модель отвечает: Gemma в LM Studio или GigaChat API |
 | `docker compose exec db psql -U colorpass -c "select file, verdict, errors from checks"` | история проверок в базе |
 
 ## Качество
@@ -173,8 +166,8 @@ PDF ──► ingest ──► вид документа ──► extract / sig
         векторы,                       экспликация вывесок                                           │   (история)
         рендер                                                                                       └─► runs/ (файлы)
 фото ──► photo: развёртка/фотомонтаж ↔ фото, углы фасада, ΔE00 по зонам, карта отличий, вердикт
-Gemma 4 (LM Studio через ngrok), запасная — GigaChat API: разбор записки, заключение, описание отличий на фото
-чат ──► chat (TanStack AI) ──► инструменты: GET /api/checks/{id}, /rules, /comparisons ──► LM Studio
+chat (TanStack AI) ──► LM Studio через ngrok, запасной GigaChat API: чат по отчёту, заключение, описание отличий на фото
+     данные — GET /api/checks/{id}, /rules, /comparisons; ответы модели — POST /api/checks/{id}/conclusion, …/review
 ```
 
 ```
@@ -188,8 +181,7 @@ backend/
     color.py            sRGB↔Lab, CIEDE2000, кластеризация
     graphics.py         цвет по выноскам, образцы, палитра развёртки, остекление
     photo.py            развёртки и фото на листах, углы фасада, выравнивание, сравнение, карта отличий
-    textmatch.py        разбор записки правилами (резерв модели)
-    llm.py, llm_tasks.py  клиенты LM Studio и GigaChat API, выбор модели, промпты, валидация ответов
+    textmatch.py        разбор пояснительной записки правилами
     checks.py           22 проверки паспорта
     pipeline.py         полный цикл, отчёт, изображения
     store.py            история в PostgreSQL (DATABASE_URL); без базы — файлы
@@ -199,23 +191,28 @@ backend/
   api/, config/         Django 4.2: /api/*
   devserver.py          тот же API без Django
 frontend/               React 18 + Vite; чат — components/ChatPanel.jsx, chat/tools.js
-chat/                   сервис чата: TanStack AI + Hono (server.js, tools.js — инструменты, prompt.js)
+chat/                   языковые модели: TanStack AI + Hono (server.js, llm.js — LM Studio и GigaChat, tasks.js —
+                        заключение и описание фото, tools.js — инструменты чата, prompt.js)
 dataset/real/           паспорта и их разметка; dataset/signs/ — образцы дизайн-проектов mos.ru
 ```
 
-API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples/{name}/check?llm=1`,
-`POST /api/checks` (multipart `file`, `llm`), `GET /api/checks`, `GET /api/checks/{id}`,
+API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples/{name}/check`,
+`POST /api/checks` (multipart `file`), `GET /api/checks`, `GET /api/checks/{id}`,
 `GET /api/checks/{id}/files/{path}`, `GET /api/checks/{id}/export.xlsx` (выгрузка чек-листа и заключения в Excel);
 сравнение фото: `GET /api/checks/{id}/blocks` (развёртки, чертежи,
 фотомонтаж и фото документа), `POST /api/checks/{id}/corners` (подсказка углов фасада: `photo` или `photo_block`),
 `POST /api/checks/{id}/comparisons` (multipart `facade`, `photo` или `photo_block`, `quad` — 4 угла `[[x, y], …]`,
-`rect` — часть развёртки в долях, `llm`), `GET /api/checks/{id}/comparisons`.
+`rect` — часть развёртки в долях), `GET /api/checks/{id}/comparisons`.
 Замечания: `POST /api/checks/{id}/change_status` (multipart `finding_id`, `action` — `dismiss`/`restore`/`delete`,
 `reason` — необязательно) исключает ложное срабатывание и пересчитывает вердикт, счётчики и заключение.
 Решение по документу: `POST /api/checks/{id}/decision` (multipart `decision` — `accepted`/`rejected`, `note` —
 необязательно) ставит статус «Проверен и принят» или «Проверен и отклонён»; через 30 дней файл автоматически
 переносится в архив (`runs/web/archive/`), но остаётся доступен по прямой ссылке.
-Чат: `POST /chat/checks/{id}` (поток AG-UI для `useChat`), `GET /chat/health` (доступна ли модель).
+Ответы модели (присылает сервис `chat`): `POST /api/checks/{id}/conclusion` (JSON `text`, `model`, `provider`),
+`POST /api/checks/{id}/comparisons/{cid}/review` (JSON `review` — `same_facade`, `differences`, `summary`; или `error`).
+
+Сервис `chat`: `POST /chat/checks/{id}` (диалог, поток AG-UI для `useChat`), `POST /chat/checks/{id}/conclusion`,
+`POST /chat/checks/{id}/comparisons/{cid}/review`, `GET /chat/health` (какая модель отвечает).
 
 ## Ограничения MVP
 
@@ -230,8 +227,8 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 - Номера пунктов 114-ПП взяты из выдержек; форма паспорта (прил. 3, разделы I–III) сверена с текстом на garant.ru,
   пункты требований к проекту — сверить с редакцией 718-ПП от 03.04.2025 перед защитой.
 - ПП № 94-ПП от 02.02.2022 из карточки кейса пока не учтён — уточнить у ментора.
-- GigaChat API проверен на имитации сервера: из среды разработки сервер Сбера недоступен, первый настоящий запрос —
-  в Docker на вашем компьютере.
+- GigaChat API и LM Studio в сервисе `chat` проверены на имитации серверов; вызовы TanStack AI написаны по документации
+  версии 1.0 — первая настоящая сборка и запросы — в Docker на вашем компьютере.
 
 ## Вопросы ментору
 

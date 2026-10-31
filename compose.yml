@@ -1,4 +1,5 @@
-# Локальная разработка: код backend и frontend смонтирован в контейнеры, изменения подхватываются на лету.
+# Локальная разработка: код backend, frontend и chat смонтирован в контейнеры, изменения подхватываются на лету.
+# Бэкенд работает только по правилам; языковые модели (LM Studio, запасной GigaChat) — в сервисе chat.
 #   docker compose up --build       → интерфейс http://localhost:5173, API http://localhost:8000/api/health
 # Прод — compose.prod.yml (сборка образов: gunicorn, Caddy со статикой и HTTPS).
 name: colorpass-dev
@@ -8,21 +9,11 @@ services:
     build: ./backend
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]   # автоперезагрузка при изменении кода
     environment:
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}      # GigaChat API — запасная модель; без ключа — проверка по правилам
-      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
-      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
-      GIGACHAT_VERIFY_SSL: ${GIGACHAT_VERIFY_SSL:-1}
       DATABASE_URL: postgresql://colorpass:${POSTGRES_PASSWORD:-colorpass}@db:5432/colorpass
-      LLM_TIMEOUT: "300"
       COLORPASS_WORKERS: "2"
       COLORPASS_MAX_UPLOAD_MB: "100"
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
-      # основная модель — Gemma 4 в LM Studio на этом компьютере (или чужая через ngrok); не отвечает — GigaChat API
-      LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
-      LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ./backend:/app/backend    # код — с диска
       - ./runs:/app/runs          # отчёты проверок
@@ -51,22 +42,22 @@ services:
     depends_on:
       backend: { condition: service_healthy }
 
-  chat:                         # чат по отчёту (TanStack AI): данные — из backend, модель — LM Studio
-    image: node:22-alpine
-    working_dir: /app
-    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev"]   # node --watch: перезапуск при изменении кода
+  chat:                         # языковые модели (TanStack AI): чат, заключение, описание фото; данные — из backend
+    build: ./chat
+    command: ["node", "--watch", "src/server.js"]   # перезапуск при изменении кода
     environment:
       BACKEND_URL: http://backend:8000
-      # модель — та же, что у бэкенда (LM Studio); отдельная — CHAT_LLM_URL / CHAT_LLM_MODEL
+      # основная модель — LM Studio на этом компьютере (или чужая через ngrok); не отвечает — GigaChat API; нет обеих — ИИ-функции недоступны, правила работают
       LOCAL_LLM_URL: ${LOCAL_LLM_URL:-http://host.docker.internal:1234/v1}
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-}
       LOCAL_LLM_KEY: ${LOCAL_LLM_KEY:-}
-      CHAT_LLM_URL: ${CHAT_LLM_URL:-}
-      CHAT_LLM_MODEL: ${CHAT_LLM_MODEL:-}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Max}
+      LLM_TIMEOUT: "300"
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
-      - ./chat:/app
-      - chat-node-modules:/app/node_modules
+      - ./chat/src:/app/src       # код — с диска; зависимости — в образе (поменяли package.json — up --build)
     ports: ["127.0.0.1:${COLORPASS_CHAT_PORT:-3000}:3000"]
     depends_on:
       backend: { condition: service_healthy }
@@ -88,4 +79,3 @@ services:
 volumes:
   pgdata:
   frontend-node-modules:
-  chat-node-modules:

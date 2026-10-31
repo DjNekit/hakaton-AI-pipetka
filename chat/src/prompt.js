@@ -10,8 +10,9 @@ const TAB_TITLES = {
   photo: "Сравнение с фото",
 };
 
-/** Системный промпт: роль, правила поведения, сводка проверки и что пользователь видит на экране. */
-export function systemPrompt(run, ui) {
+/** Системный промпт: роль, правила поведения, сводка проверки и что пользователь видит на экране.
+ *  withTools=false (запасной GigaChat — у него свой формат вызова функций): данные проверки — прямо в промпте. */
+export function systemPrompt(run, ui, withTools = true) {
   const lines = [
     "Ты — помощник инспектора Москомархитектуры в сервисе «Колорпаспорт». Сервис проверяет паспорта колористических решений",
     "фасадов (ПП Москвы № 114-ПП) и дизайн-проекты вывесок (№ 902-ПП) и сравнивает фото зданий с чертежами.",
@@ -28,6 +29,24 @@ export function systemPrompt(run, ui) {
     "Текущая проверка:",
     JSON.stringify(overview(run), null, 0),
   ];
+  if (!withTools) {
+    const r = run.report;
+    const active = r.findings.filter((f) => !f.dismissed);
+    const swap = (prefix, text) => (lines[lines.findIndex((l) => l.startsWith(prefix))] = text);
+    swap("- Факты бери", "- Факты бери только из данных проверки ниже. Не выдумывай замечаний, кодов цвета, номеров листов и пунктов НПА.");
+    swap("- Когда говоришь", "- Инструментов у тебя сейчас нет: показать замечание на листе ты не можешь — назови его id, пользователь нажмёт на него.");
+    lines.push(
+      "",
+      "Замечания (page_index — индекс листа):",
+      JSON.stringify(active.map((f) => ({ id: f.id, rule: f.rule, severity: f.severity, message: f.message, page_index: f.page, ref: f.ref }))),
+      "",
+      "Чек-лист — нарушенные и спорные требования:",
+      JSON.stringify(r.checklist.filter((c) => c.status === "fail" || c.status === "warn").map((c) => ({ rule: c.rule, title: c.title, status: c.status, ref: c.ref }))),
+      "",
+      "Заключение по проверке:",
+      r.conclusion?.text || "—",
+    );
+  }
   if (ui && typeof ui === "object") {
     const tab = TAB_TITLES[ui.tab] || ui.tab;
     const parts = [];
