@@ -186,7 +186,8 @@ dataset/real/           паспорта и их разметка; dataset/signs
 
 API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples/{name}/check?llm=1`,
 `POST /api/checks` (multipart `file`, `llm`), `GET /api/checks`, `GET /api/checks/{id}`,
-`GET /api/checks/{id}/files/{path}`; сравнение фото: `GET /api/checks/{id}/blocks` (развёртки, чертежи,
+`GET /api/checks/{id}/files/{path}`, `GET /api/checks/{id}/export.xlsx` (выгрузка чек-листа и заключения в Excel);
+сравнение фото: `GET /api/checks/{id}/blocks` (развёртки, чертежи,
 фотомонтаж и фото документа), `POST /api/checks/{id}/corners` (подсказка углов фасада: `photo` или `photo_block`),
 `POST /api/checks/{id}/comparisons` (multipart `facade`, `photo` или `photo_block`, `quad` — 4 угла `[[x, y], …]`,
 `rect` — часть развёртки в долях, `llm`), `GET /api/checks/{id}/comparisons`.

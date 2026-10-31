@@ -17,7 +17,7 @@ import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from colorpass.envfile import load_env  # noqa: E402
@@ -71,6 +71,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
         self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _download(self, data: bytes, filename: str, content_type: str):
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header(
+            "Content-Disposition",
+            f"attachment; filename=\"report.xlsx\"; filename*=UTF-8''{quote(filename)}",
+        )
         self.end_headers()
         self.wfile.write(data)
 
@@ -138,6 +149,12 @@ class Handler(BaseHTTPRequestHandler):
             if m and method == "POST":
                 return self._json(
                     service.set_decision(m.group(1), form.get("decision", ""), form.get("note", ""))
+                )
+            m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/export\.xlsx", path)
+            if m and method == "GET":
+                data, filename = service.export_excel(m.group(1))
+                return self._download(
+                    data, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             m = re.fullmatch(r"/api/checks/([0-9a-f]{12})/files/(.+)", path)
             if m and method == "GET":
