@@ -192,6 +192,9 @@ API: `GET /api/health`, `GET /api/rules`, `GET /api/samples`, `POST /api/samples
 `rect` — часть развёртки в долях, `llm`), `GET /api/checks/{id}/comparisons`.
 Замечания: `POST /api/checks/{id}/change_status` (multipart `finding_id`, `action` — `dismiss`/`restore`/`delete`,
 `reason` — необязательно) исключает ложное срабатывание и пересчитывает вердикт, счётчики и заключение.
+Решение по документу: `POST /api/checks/{id}/decision` (multipart `decision` — `accepted`/`rejected`, `note` —
+необязательно) ставит статус «Проверен и принят» или «Проверен и отклонён»; через 30 дней файл автоматически
+переносится в архив (`runs/web/archive/`), но остаётся доступен по прямой ссылке.
 
 ## Ограничения MVP
 

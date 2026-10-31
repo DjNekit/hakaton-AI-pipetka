@@ -133,6 +133,14 @@ def change_status(request, run_id: str):
     )
 
 
+@api_view(["POST"])
+def set_decision(request, run_id: str):
+    return JsonResponse(
+        service.set_decision(run_id, request.POST.get("decision", ""), request.POST.get("note", "")),
+        **_JSON,
+    )
+
+
 # ----------------------------------------------------------------- фронтенд (сборка frontend/dist)
 
 

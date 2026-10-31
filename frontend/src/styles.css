@@ -65,6 +65,9 @@ button {
 .tone-text-warn {
   color: var(--warn);
 }
+.tone-text-ok {
+  color: var(--ok);
+}
 .muted,
 .muted-block {
   color: var(--muted);
@@ -1089,6 +1092,49 @@ button {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+.paper-decision {
+  grid-column: 1 / -1;
+  border-left: 4px solid var(--rule-strong);
+}
+.paper-decision.tone-ok {
+  border-left-color: var(--ok);
+}
+.paper-decision.tone-error {
+  border-left-color: var(--error);
+}
+.decision-status {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.decision-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+.btn-danger:hover {
+  background: var(--error-soft);
+}
+.btn-danger.is-active {
+  background: var(--error);
+  color: #fff;
+}
+.btn-danger.is-active:hover {
+  background: #9f2a23;
+}
+.decision-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--pencil);
+}
+.decision-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--error);
 }
 .paper-reference {
   background: transparent;

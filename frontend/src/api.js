@@ -55,6 +55,12 @@ export const api = {
     if (reason) fd.append("reason", reason);
     return request(`/checks/${id}/change_status`, { method: "POST", body: fd });
   },
+  setDecision: (id, decision, note = "") => {
+    const fd = new FormData();
+    fd.append("decision", decision);
+    if (note) fd.append("note", note);
+    return request(`/checks/${id}/decision`, { method: "POST", body: fd });
+  },
   fileUrl: (id, rel) => `${BASE}/checks/${id}/files/${rel}`,
   samplePdfUrl: (name) => `${BASE}/samples/${name}/pdf`,
 };

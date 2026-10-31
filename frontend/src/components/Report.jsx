@@ -166,7 +166,7 @@ export default function Report({ run, useLlm, onUpdate }) {
       {tab === "table" && <FinishTable report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "explication" && <Explication report={report} findings={activeFindings} onSelect={(f) => { select(f); setTab("findings"); }} />}
       {tab === "checklist" && <Checklist report={report} onSelect={(f) => { select(f); setTab("findings"); }} />}
-      {tab === "conclusion" && <Conclusion run={run} />}
+      {tab === "conclusion" && <Conclusion run={run} onUpdate={onUpdate} />}
       {tab === "photo" && <PhotoCompare run={run} useLlm={useLlm} />}
     </article>
   );

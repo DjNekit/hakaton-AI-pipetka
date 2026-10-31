@@ -12,6 +12,7 @@
 version: 1
 
 thresholds:
+  archive_after_days: 30       # принятый или отклонённый документ уходит в архив через 30 дней
   delta_e_swatch_warn: 8       # ΔE00 образец ↔ марка RAL: предупреждение
   delta_e_swatch_error: 15     #                           ошибка
   delta_e_ncs_factor: 1.6      # для NCS (приближённый перевод) пороги умножаются
