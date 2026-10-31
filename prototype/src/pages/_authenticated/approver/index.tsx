@@ -1,0 +1,93 @@
+import { IconLayoutKanban, IconList } from '@tabler/icons-react'
+import { useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
+
+import { applicationsQueryOptions } from '@/entities/application'
+import { useTranslation, z } from '@/shared/i18n'
+import { Skeleton } from '@/shared/ui/components/skeleton'
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/shared/ui/components/toggle-group'
+import { ApplicationSheet } from '@/widgets/application-details'
+import { ApplicationsBoard } from '@/widgets/applications-board'
+import { ApplicationsTable } from '@/widgets/applications-table'
+
+const searchSchema = z.object({
+  view: z.enum(['board', 'table']).optional().catch(undefined),
+  selected: z.string().optional().catch(undefined),
+})
+
+export const Route = createFileRoute('/_authenticated/approver/')({
+  validateSearch: searchSchema,
+  component: Applications,
+})
+
+function Applications() {
+  const { t } = useTranslation()
+  const { view = 'board', selected } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const { data, isPending, isError } = useQuery(applicationsQueryOptions())
+
+  return (
+    <main className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between border-b px-6 py-3">
+        <h1 className="text-lg font-semibold">{t('approver.board.title')}</h1>
+        <ToggleGroup
+          value={[view]}
+          onValueChange={value => {
+            const next = value[0]
+            if (next === 'board' || next === 'table') {
+              void navigate({ search: prev => ({ ...prev, view: next }) })
+            }
+          }}
+          variant="outline"
+          size="sm"
+        >
+          <ToggleGroupItem
+            value="board"
+            aria-label={t('approver.board.viewBoard')}
+          >
+            <IconLayoutKanban />
+            {t('approver.board.viewBoard')}
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="table"
+            aria-label={t('approver.board.viewTable')}
+          >
+            <IconList />
+            {t('approver.board.viewTable')}
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+      {isPending && (
+        <div className="flex gap-3 px-6 py-4">
+          <Skeleton className="h-64 w-72" />
+          <Skeleton className="h-64 w-72" />
+          <Skeleton className="h-64 w-72" />
+        </div>
+      )}
+      {isError && (
+        <p className="px-6 py-4 text-destructive">
+          {t('application.loadError')}
+        </p>
+      )}
+      {data && view === 'board' && (
+        <ApplicationsBoard applications={data} selectedId={selected} />
+      )}
+      {data && view === 'table' && (
+        <ApplicationsTable
+          applications={data}
+          detailRoute="/approver/$id"
+          showApplicant
+        />
+      )}
+      <ApplicationSheet
+        id={view === 'board' ? selected : undefined}
+        onClose={() =>
+          void navigate({ search: prev => ({ ...prev, selected: undefined }) })
+        }
+      />
+    </main>
+  )
+}

@@ -1,0 +1,92 @@
+import type { ApplicationStatus } from '../model'
+
+const COLORS: Record<ApplicationStatus, string> = {
+  ai_check: 'text-violet-500',
+  in_review: 'text-amber-500',
+  rework: 'text-orange-500',
+  approved: 'text-emerald-500',
+  rejected: 'text-muted-foreground',
+}
+
+export function StatusIcon({
+  status,
+  className = 'size-3.5',
+}: {
+  status: ApplicationStatus
+  className?: string
+}) {
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+      className={`${COLORS[status]} shrink-0 ${className}`}
+    >
+      {status === 'ai_check' && (
+        <>
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeDasharray="1.6 1.6"
+          />
+          <path
+            d="M7 4.2l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z"
+            fill="currentColor"
+          />
+        </>
+      )}
+      {status === 'in_review' && (
+        <>
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <path d="M7 3.5a3.5 3.5 0 0 1 0 7z" fill="currentColor" />
+        </>
+      )}
+      {status === 'rework' && (
+        <>
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeDasharray="2.4 1.6"
+          />
+          <path d="M7 3.5v4" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="7" cy="9.75" r="0.85" fill="currentColor" />
+        </>
+      )}
+      {status === 'approved' && (
+        <>
+          <circle cx="7" cy="7" r="6.25" fill="currentColor" />
+          <path
+            d="M4.5 7.2l1.7 1.7 3.3-3.6"
+            stroke="white"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+      {status === 'rejected' && (
+        <>
+          <circle cx="7" cy="7" r="6.25" fill="currentColor" />
+          <path
+            d="M5 5l4 4M9 5l-4 4"
+            stroke="white"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </>
+      )}
+    </svg>
+  )
+}
